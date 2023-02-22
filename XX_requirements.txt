@@ -1,0 +1,22 @@
+
+lmdb
+pyyaml
+scipy
+tb-nightly
+torch>=1.7
+torchvision
+tqdm
+yapf
+clip-interrogator==0.5.0
+
+
+// Found needed --
+numpy
+PyQt5
+PyOpenGL
+Pillow
+opencv-python
+torch torchvision --extra-index-url https://download.pytorch.org/whl/cu117
+basicsr>=1.4.2
+clip-anytorch
+facexlib>=0.2.5

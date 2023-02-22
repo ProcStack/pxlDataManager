@@ -10,12 +10,6 @@ from basicsr.utils import img2tensor, tensor2img, imwrite
 from facexlib.utils.face_restoration_helper import FaceRestoreHelper
 
 
-
-
-
-
-
-
 class FaceFinder():
     """
         Face Finder & Aligner Class
@@ -42,7 +36,7 @@ class FaceFinder():
             use_parse=True,
             device=self.device,
             # TODO : Fix this nested folder thing
-            model_rootpath='utils/gfpgan/weights')
+            model_rootpath='weights/FaceFinder')
         
     def input(self,imgPath):
     
@@ -51,15 +45,20 @@ class FaceFinder():
         basename, ext = os.path.splitext(img_name)
         inputImg = cv2.imread(imgPath, cv2.IMREAD_COLOR)
         
-        saveUnalignedCropPath = os.path.join(self.output, 'cropped_faces', f'{basename}_unalign.png')
+        saveUnalignedCropPath = os.path.join(self.output, f'{basename}_unalign.png')
         croppedFaces, detFaces = self.find(inputImg,saveUnalignedCropPath)
-        croppedFacePaths=[]
+        foundFacesDictList=[]
         for idx, curCroppedFace in enumerate(croppedFaces):
-            save_crop_path = os.path.join(self.output, 'cropped_faces', f'{basename}_{idx:02d}.png')
-            croppedFacePaths.append(save_crop_path)
-            print("Outputting to - ",save_crop_path)
-            imwrite(curCroppedFace, save_crop_path)
-        return (detFaces,croppedFacePaths)
+            alignedPath = os.path.join(self.output, f'{basename}_{idx:02d}_aligned.png')
+            print("Outputting to - ",alignedPath)
+            imwrite(curCroppedFace, alignedPath)
+            unalignedPath = os.path.join(self.output, f'{basename}_{idx:02d}_unaligned.png')
+            foundFacesDictList.append({
+                "alignedPath":alignedPath,
+                "unalignedPath":unalignedPath,
+                "detFace":detFaces[idx]
+            })
+        return foundFacesDictList
 
     @torch.no_grad()
     def find(self, img, unalignCropPath):
@@ -79,33 +78,5 @@ class FaceFinder():
             # align and warp each face
             self.faceHelper.align_warp_face()
 
-        print( self.faceHelper.det_faces )
-        
-        """
-        for idx, landmark in enumerate(self.faceHelper.all_landmarks_5):
-            affine_matrix = cv2.estimateAffinePartial2D(landmark, self.faceHelper.face_template, method=cv2.LMEDS)[0]
-            affine_matrix[0][0]=0
-            print(affine_matrix)
-            border_mode = cv2.BORDER_CONSTANT
-            cropped_face = cv2.warpAffine(
-                self.faceHelper.input_img, affine_matrix, self.faceHelper.face_size, borderMode=border_mode, borderValue=(135, 133, 132))  # gray
-            imwrite(cropped_face, unalignCropPath)
-        """
         
         return (self.faceHelper.cropped_faces,self.faceHelper.det_faces)
-        """
-        if not has_aligned and paste_back:
-            # upsample the background
-            if self.bg_upsampler is not None:
-                # Now only support RealESRGAN for upsampling background
-                bg_img = self.bg_upsampler.enhance(img, outscale=self.upscale)[0]
-            else:
-                bg_img = None
-
-            self.faceHelper.get_inverse_affine(None)
-            # paste each restored face to the input image
-            restored_img = self.faceHelper.paste_faces_to_input_image(upsample_img=bg_img)
-            return self.faceHelper.cropped_faces, self.faceHelper.restored_faces, restored_img
-        else:
-            return self.faceHelper.cropped_faces, self.faceHelper.restored_faces, None
-        """
