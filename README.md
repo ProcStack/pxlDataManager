@@ -12,7 +12,8 @@ Once setting a source folder and regressively sourcing all folders & images with
 
 The available AI's you may run on any & all found images -
  - `Resnet` face finding, with face alignment, from `GFPGAN`
- - `Clip Interrogator` for `BLIP`'s Image2Prompt, with easy editing and saving of image & prompt `.jpg`/`.png` + `.txt` pairs.
+ - `Clip Interrogator` for `BLIP`'s Image2Prompt
+   - Easy editing and saving of image & prompt `.jpg`/`.png` + `.txt` pairs.
    - *( For `AUTOMATIC1111`'s Textural Inversion and/or HyperNet training )*
  - `ControlNet`'s `Depth`, `Normal`, and `OpenPose` generation;
    - The `canny`, `mlsd`, & `hed` AI outputs fail to meet my level of acceptable edge finding.
@@ -20,30 +21,33 @@ The available AI's you may run on any & all found images -
    - *(With plans for further training of `ControlNet`'s existing models based on your alterations)*
 
 Final implementation, *currently not added*, is to add ProcStack's altered StableDiffusion directly into `pxlDataManager` itself.
-<br>Randomized prompts per image per iteration, more organized outputs, better output names, and optional ranking for a personal "expected output" AI for future input prompts.
+<br>&nbsp;&nbsp;Randomized prompts per image per iteration,
+<br>&nbsp;&nbsp;Better organization of outputs,
+<br>&nbsp;&nbsp;Clean output names,
+<br>&nbsp;&nbsp;And optional ranking of a personal "expected output" AI for future input prompts.
 
 For now, custom implementations are not being added to `pxlDataManager` as its out-of-date by a few months.
-<br>I'll be modularizing my alterations for an agnostic approach to AI generations.
-<br>*(Any on-the-fly repository pulls will be added soon, most likely from a ProcStack branch of the core StableDiffusion repo)*
+<br>&nbsp;&nbsp;I'll be modularizing my alterations for an agnostic approach to AI generations.
+<br>&nbsp;&nbsp;*(Any on-the-fly repository pulls will be added soon, most likely from a ProcStack branch of the core StableDiffusion repo)*
 
 <hr>
 
 ## What's In pxlDataManager?
 *(All scripts have stand-alone PyQt5 versions, works-in-progress though.)*
 
-`pxlDataManager.py` - **MAIN**; Primary Image Organization Manager; Import folder hierarchies of images for easy viewing, including all below image and file tools. While also organizing the outputs from all the scripts below in `./Projects/PROJECT_NAME`
+ - `pxlDataManager.py` <br> **MAIN**; Primary Image Organization Manager; Import folder hierarchies of images for easy viewing, including all below image and file tools. While also organizing the outputs from all the scripts below in `./Projects/PROJECT_NAME`
 
-`ControlNetGenerator.py` - **WIP** ControlNet Preprocessors; Generate and alter ControlNet data prior to AI usage.
+ - `utils/ControlNetGenerator.py` <br> **WIP** ControlNet Preprocessors; Generate and alter ControlNet data prior to AI usage.
 
-`ViewportGL.py` - **WIP** PyOpenGL scripts for easy image cropping, interaction, and visual effects.  
+ - `utils/ViewportGL.py` <br> **WIP** PyOpenGL scripts for easy image cropping, interaction, and visual effects.  
 
-`FaceFinder.py` - Find, Isolate, and Align faces in provided images. Based on `GFPGAN`
+ - `utils/FaceFinder.py` <br> Find, Isolate, and Align faces in provided images. Based on `GFPGAN`
 
-`FileIngester.py` - Load all found files within directories for adding arbitrary data.  This creates JSON dictionary files with any custom user data saved.  This extends the limitations of image META data, but only within the `FileIngester.py` / `pxlDataManager.py` pipelines.
+ - `utils/FileIngester.py` <br> Load all found files within directories for adding arbitrary data.  This creates JSON dictionary files with any custom user data saved.  This extends the limitations of image META data, but only within the `FileIngester.py` / `pxlDataManager.py` pipelines.
 
-`ImageToPrompt.py` - Generate a Prompt from a provided Image. Currently only using BLIP.  Based on `clip-interrogator`
+ - `utils/ImageToPrompt.py` <br> Generate a Prompt from a provided Image. Currently only using BLIP.  Based on `clip-interrogator`
 
-`TrainingLabelGenerator.py` - Easy file organizations and text editor for Prompt'ed images for AI training.  Will export Image + Text file pairs for easy injestion for Textural Inversion and HyperNet training.
+ - `utils/TrainingLabelGenerator.py` <br> Easy file organizations and text editor for Prompt'ed images for AI training.  <br> Will export Image + Text file pairs for easy injestion for Textural Inversion and HyperNet training.
 
 <hr>
 
@@ -79,7 +83,7 @@ Outside of direct influence, I'll be adding a 3d `OpenPose` posing interface.
 I have no ill will toward AI researcher's scraping the internet for training material.
 <br>&nbsp;&nbsp;However, as a former feature film technical director & *still* digital creator,
 <br>&nbsp;&nbsp;&nbsp;&nbsp;I fully understand the distain from those of whom which don't want their hard work sourced as AI training material.
-<p>While I'm an open-source friendly bugger, I don't care as much for the 20+ years worth of my own work...</p>
+<p>&nbsp;&nbsp;While I'm an open-source friendly bugger, I don't care as much for the 20+ years worth of my own work...</p>
 
 **BUT**, that means I'm taking the side of my friends & co-workers before my own selfish desires.
 <br>*Live and let Live*
@@ -89,15 +93,18 @@ I have no ill will toward AI researcher's scraping the internet for training mat
 <hr>
 
 File organization & managment for training purposes may get into the 10's-100's of thousands.  Yeilding the need for this toolkit.
-<br> Easy indexing, `Project`-ifying of source material, and quick image alterations in lieu of running AI generations.
+<br>&nbsp;&nbsp;Easy indexing, `Project`-ifying of source material, and quick image alterations in lieu of running AI generations.
 
-Since there are many popular AI systems currently in existance, my aim is to cater to their pipelines.  Thus Textural Inversion and HyperNet training tool outputs organized for AUTOMATIC1111 WebUI.
-<br>Pre-processed ControlNet outputs with direct injections into existing neural networks.  Being, you can adjust your ControlNet input images before running any model generations.
+Since there are many popular AI systems currently in existance, my aim is to cater to their pipelines.
+<br>&nbsp;&nbsp;Thus Textural Inversion and HyperNet training tool outputs organized for AUTOMATIC1111 WebUI.
+<br>&nbsp;&nbsp;Pre-processed ControlNet outputs with direct injections into existing neural networks.
+<br>&nbsp;&nbsp;&nbsp;&nbsp;Being, you can adjust your ControlNet input images before running any model generations.
 
-All ControlNet scripts being added currently are designed to be a pre-process system, prior to using any AI toolkit which utilizes ControlNet in their pipeline.  Such as `sd-webui-controlnet` for `AUTOMATIC1111`'s webui project.
-<br>I'll add any branches or requirements for any A1111 webui extension to this repo itself.
-<br>Mostly for retaining the breadcrumb trail of required repos for functionality of those extention scripts.
-<br>*(To be added soon)*
+All ControlNet scripts being added currently are designed to be a pre-process system, prior to using any AI toolkit which utilizes ControlNet in their pipeline.
+<br>&nbsp;&nbsp;*Such as `sd-webui-controlnet` for `AUTOMATIC1111`'s webui project*
+<br>&nbsp;&nbsp;I'll add any branches or requirements for any A1111 webui extension to this repo itself.
+<br>&nbsp;&nbsp;Mostly for retaining the breadcrumb trail of required repos for functionality of those extention scripts.
+<br>&nbsp;&nbsp;&nbsp;&nbsp;*(To be added soon)*
 
 
 ## Notes of Warning
