@@ -63,6 +63,16 @@ float addComponents(vec4 val){
 }
 """
 
+# Rotation Vec3 to UV value
+rotToUV="""
+vec2 rotToUV(vec3 direction){
+    vec2 uv = vec2(atan(direction.z, direction.x), asin(direction.y));
+    uv *= vec2(0.1591, 0.3183);
+    uv += 0.5;
+    return uv;
+}
+"""
+
 # -- -- --
 
 # Convert vec3 color to luminance
@@ -81,15 +91,6 @@ float greyScale(vec3 color) {
 }
 """
 
-# Rotation Vec3 to UV value
-rotToUV="""
-vec2 rotToUV(vec3 direction){
-    vec2 uv = vec2(atan(direction.z, direction.x), asin(direction.y));
-    uv *= vec2(0.1591, 0.3183);
-    uv += 0.5;
-    return uv;
-}
-"""
 
 # `rgb2hsv` & `hsv2rgb` from -
 #   https://stackoverflow.com/questions/15095909/from-rgb-to-hsv-in-opengl-glsl
