@@ -9,12 +9,13 @@ All below modules rely on Torch in one way or another,
 <br> Make sure to use that user, if possible, when running pxlImageLabeler
 
 
-`ClipInterrogator` - Only uses `BLIP` currently
+`ClipInterrogator` -
+ - Only uses `BLIP` currently
 
 `BLIP` -
-`model_base_caption_capfilt_large.pth` - 875mb
+ - `model_base_caption_capfilt_large.pth` - *875mb*
 
 
 `FaceFinder` -
-`detection_Resnet50_Final.pth` - 106mb
-`parsing_parsenet.pth` - 83mb
+ - `detection_Resnet50_Final.pth` - *106mb*
+ - `parsing_parsenet.pth` - *83mb*
