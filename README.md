@@ -21,7 +21,7 @@ All ControlNet scripts being added currently are designed to be a pre-process sy
 
 `ControlNetGenerator.py` - **WIP** ControlNet Preprocessors; Generate and alter ControlNet data prior to AI usage.
 
-`EffectorGL.py` - **WIP** PyOpenGL scripts for easy image cropping, interaction, and visual effects.  
+`ViewportGL.py` - **WIP** PyOpenGL scripts for easy image cropping, interaction, and visual effects.  
 
 `FaceFinder.py` - Find, Isolate, and Align faces in provided images. Based on `GFPGAN`
 

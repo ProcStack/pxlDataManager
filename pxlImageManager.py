@@ -21,6 +21,23 @@ from PyQt5.uic import *
 
 #from basicsr.utils import imwrite
 
+import utils.UserSettingsManager as pxlSettings
+import utils.ViewportGL as ViewerGL
+import utils.ViewportBufferGL as ViewerBufferGL
+
+# -- -- --
+
+# Current known issues -
+# _Resizing Lower Shelf is janky as all the funking trumpet players...
+# _ViewportGL's seem to be sharing uniform values, bleh...
+#
+# TODOs -
+# _Implement the Settings Manager, easy, but needs to be done
+# _Auto Load Crops isn't implemented
+# _Get ViewportGL loading with more options and sliders and better Fragment Shader
+# _Make AI's Async; FaceFinder & ImageToPrompt
+# _Implement OpenPose finder for ControlNet prep
+
 
 
 # -- -- --
@@ -49,13 +66,28 @@ ImageLabelerProjectData = {}
 # Folders expected to be in root of script
 # TODO : Allow for input output folder paths
 class ImageLabelerProjectManager(QMainWindow):
-    def __init__(self, *args):
+    def __init__(self, screenRes=[600,450], settingsManager=None, *args):
         super(ImageLabelerProjectManager, self).__init__(*args)
+        
+        self.settings = settingsManager
         
         self.menuBar = None
         self.mouseLocked = False
         self.mouseMoved = False
 
+        self.screenRes = screenRes
+        self.screenCenter = [int(screenRes[0]*.5), int(screenRes[1]*.5)]
+        
+        self.managerInitSize = [ 600, 450 ]
+        
+        self.managerInitPos = [ 200, 200 ]
+        self.managerInitPos[0] = int( self.screenCenter[0] - self.managerInitSize[0]*.5 )
+        self.managerInitPos[1] = int( self.screenCenter[1] - self.managerInitSize[1]*.5 )
+        
+        self.projectLoadMinSize = [ int(self.screenRes[0]*.75), int(self.screenRes[1]*.75) ]
+
+        #self.projectLoadMinWidth = [min( screenRes[0], 1000 ),min( screenRes[1], 700 )]
+        
         
         self.sourceDir = ""
         self.outputDir = ""
@@ -577,9 +609,8 @@ class ImageLabelerProjectManager(QMainWindow):
         
         # -- -- -- -- -- -- -- -- -- -- --
         # Set Final Self.Geometry Settings
-        geopos = [ 200, 200 ]
-        geosize = [ 600, 450 ]
-        self.setGeometry( geopos[0], geopos[1], geosize[0], geosize[1] )
+        
+        self.setGeometry( self.managerInitPos[0], self.managerInitPos[1], self.managerInitSize[0], self.managerInitSize[1] )
         
     
     @QtCore.pyqtSlot()
@@ -748,8 +779,25 @@ class ImageLabelerProjectManager(QMainWindow):
             
             self.createMenuBar()
             self.createStatusBar()
-        
+            
+            
+            toGeoSize = self.projectLoadMinSize.copy()
+            # -- -- --
+            toGeoPos = self.projectLoadMinSize.copy()
+            toGeoPos[0] = int( self.screenCenter[0] - toGeoSize[0]*.5 )
+            toGeoPos[1] = int( self.screenCenter[1] - toGeoSize[1]*.5 )
+            # -- -- --
+            self.setGeometry( toGeoPos[0], toGeoPos[1], toGeoSize[0], toGeoSize[1] )
+
             self.loadProjectBlockWidget.setParent(None)
+            
+            self.showStatus( "Loading Project - "+self.projectName, 1 )
+            
+            self.update()
+            QApplication.processEvents()
+            
+            # -- -- --
+            
             self.projectWidget = ImageLabelerProject( parent=self, outputPath = self.projectPath )
             
             #self.mainLayout.addWidget(self.projectWidget)
@@ -768,6 +816,9 @@ class ImageLabelerProjectManager(QMainWindow):
             #print(self.curProjectBlockLayout.geometry())
 
             #print(" Finished Loading ", self.projectName )
+            
+            #curGeo = self.geometry()
+            #self.setGeometry( curGeo.x(), curGeo.y(), max(self.projectLoadMinSize[0],curGeo.width()), max(self.projectLoadMinSize[1],curGeo.height()) )
         
         #self.projectName = curProjectName
         #self.projectPath = self.existingProjects[curProjectName]['ProjectPath']
@@ -860,294 +911,6 @@ class ImageLabelerProjectManager(QMainWindow):
         
         
 
-
-vertex_code = '''
-
-    #version 330
-
-    in vec2 position;
-    in vec2 uv;
-
-    out vec3 newColor;
-    out vec2 vUv;
-
-    uniform mat4 transform; 
-
-    void main() {
-
-        gl_Position = vec4(position, 0.0f, 1.0f);
-        newColor = vec3(uv.x, uv.y, 0.0f);
-        vUv = uv;
-
-    }
-'''
-
-
-fragment_code = '''
-    #version 330
-
-    uniform sampler2D samplerTex;
-    uniform vec2 texOffset;
-    uniform vec2 texScale;
-    
-    in vec3 newColor;
-    in vec2 vUv;
-
-    out vec4 outColor;
-
-    void main() {
-        vec2 scaledUv = vUv * texScale + texOffset;
-        outColor = texture(samplerTex, scaledUv);
-
-    }
-
-'''
-
-class TextureGLWidget(QtOpenGL.QGLWidget):
-    def __init__(self,parent):
-        QtOpenGL.QGLWidget.__init__(self,parent)
-        # -- -- --
-        self.displayImage = None
-        self.runner = 0
-        
-        self.glProgram = None
-        self.glUniformLocations = {}
-        
-        self.imgId = 0
-        self.glTempTex = "assets/glTempTex.jpg"
-        self.imgData = {}
-        self.curImage = ""
-        
-        self.curOffset=[0,0]
-        self.curScale=[1,1]
-        
-        self.imgWidth=0
-        self.imgHeight=0
-        
-        self.maxWidth = 512
-        self.maxHeight = 512
-        self.setMaximumWidth( self.maxWidth )
-        self.setMaximumHeight( self.maxHeight )
-        self.setFixedWidth( self.maxWidth )
-        self.setFixedHeight( self.maxHeight )
-        
-        self.mouseLocked = False
-        self.mouseMoved = False
-        self.mouseOrigPos = None
-        self.mouseLockedPos = None
-        self.mouseDelta = None
-        self.mouseOffsetFitted = None
-        self.mouseScaleFitted = None
-        self.mouseButton = 0
-
-    def mouseMoveEvent(self, e):
-        if self.mouseLocked :
-            self.mouseLockedPos = e.pos()
-            self.mouseDelta = self.mouseOrigPos - self.mouseLockedPos
-            if self.mouseButton == 1:
-                dX = float(self.mouseDelta.x()/self.maxWidth) * self.curScale[0] + self.curOffset[0]
-                dY = float(self.mouseDelta.y()/self.maxHeight) * self.curScale[1] + self.curOffset[1]
-                self.mouseOffsetFitted = [dX,dY]
-                self.imageOffset(dX,dY,False)
-            elif self.mouseButton == 3:
-                dLen = math.sqrt(math.pow(float(self.mouseDelta.x()),2)+math.pow(float(self.mouseDelta.y()),2))
-                dLen = dLen if self.mouseDelta.x()>0 else -dLen
-                dLenX = dLen/float(self.maxWidth) * self.curScale[0]
-                dLenY = dLen/float(self.maxHeight) * self.curScale[1]
-                dX = dLenX + self.curScale[0]
-                dY = dLenY + self.curScale[1]
-                self.mouseScaleFitted = [dX,dY]
-                self.imageScale(dX,dY,False)
-                
-                dXOff = -dLenX + self.curOffset[0]
-                dYOff = -dLenY + self.curOffset[1]
-                self.imageOffset(dXOff,dYOff,False)
-                self.mouseOffsetFitted = [dXOff,dYOff]
-                #print(self.mouseOrigPos)
-                #print(self.mouseOffsetFitted)
-            
-            self.mouseMoved = True
-            self.update()
-
-    def mousePressEvent(self, e):
-        self.mouseLocked = True
-        self.mouseOrigPos = e.pos()
-        
-        if e.button() == QtCore.Qt.LeftButton:
-            self.mouseButton = 1
-        elif e.button() == QtCore.Qt.RightButton:
-            self.mouseButton = 3
-
-    def mouseReleaseEvent(self, e):
-        self.mouseLocked = False
-        if self.mouseMoved :
-            if self.mouseButton == 1:
-                self.imageOffset(self.mouseOffsetFitted[0],self.mouseOffsetFitted[1],True)
-            elif self.mouseButton == 3:
-                self.imageOffset(self.mouseOffsetFitted[0],self.mouseOffsetFitted[1],True)
-                self.imageScale(self.mouseScaleFitted[0],self.mouseScaleFitted[1],True)
-        self.mouseMoved = False
-        
-
-    def loadImage( self, filePath ):
-        curImgData = self.loadImageTex2D( filePath )
-        wFit = float( self.maxWidth / curImgData['width'] )
-        hFit = float( self.maxHeight / curImgData['height'] )
-        self.imageScale( wFit, hFit )
-        
-        #xOff = float(curImgData['width'])*.5 - float(self.maxWidth)*.5
-        #yOff = float(curImgData['height'])*.5 - float(self.maxHei
-        xOff = .5-wFit*.5
-        yOff = .5-hFit*.5
-        self.imageOffset( xOff, yOff )
-        
-        self.update()
-        
-    def loadImageTex2D(self, filename):
-        img = None
-        img_data = None
-        if filename in self.imgData :
-            img = self.imgData[filename]['image']
-            img_data = self.imgData[filename]['data']
-        else:
-            img = Image.open(filename)
-            img_data = np.array(list(img.getdata()), np.uint8)
-            #self.imgData[filename] = {'image':img,'data':img_data}
-
-        texture = gl.glGenTextures(1)
-        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT,1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
-
-        gl.glTexParameterf(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP)
-        gl.glTexParameterf(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP)
-        gl.glTexParameterf(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-        gl.glTexParameterf(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGB, img.size[0], img.size[1], 0, gl.GL_RGB, gl.GL_UNSIGNED_BYTE, img_data)
-        
-        self.imgWidth=img.size[0]
-        self.imgHeight=img.size[1]
-        self.curImage = filename
-        
-        return {'width':img.size[0],'height':img.size[1],'data':texture}
-    
-    def initializeGL(self):
-    
-        program = gl.glCreateProgram()
-        vertex = gl.glCreateShader(gl.GL_VERTEX_SHADER)
-        fragment = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
-
-        # Set shaders source
-        gl.glShaderSource(vertex, vertex_code)
-        gl.glShaderSource(fragment, fragment_code)
-
-        # Compile shaders
-        gl.glCompileShader(vertex)
-        if not gl.glGetShaderiv(vertex, gl.GL_COMPILE_STATUS):
-            error = gl.glGetShaderInfoLog(vertex).decode()
-            print("Vertex shader compilation error: ", error)
-
-        gl.glCompileShader(fragment)
-        if not gl.glGetShaderiv(fragment, gl.GL_COMPILE_STATUS):
-            error = gl.glGetShaderInfoLog(fragment).decode()
-            print(error)
-            raise RuntimeError("Fragment shader compilation error")
-
-        gl.glAttachShader(program, vertex)
-        gl.glAttachShader(program, fragment)
-        gl.glLinkProgram(program)
-
-        if not gl.glGetProgramiv(program, gl.GL_LINK_STATUS):
-            print(gl.glGetProgramInfoLog(program))
-            raise RuntimeError('Linking error')
-
-        # Shader not needed, free ram
-        gl.glDetachShader(program, vertex)
-        gl.glDetachShader(program, fragment)
-
-        gl.glUseProgram(program)
-        self.glProgram = program
-        
-        self.glUniformLocations = {
-            'texOffset': gl.glGetUniformLocation( self.glProgram, 'texOffset' ),
-            'texScale': gl.glGetUniformLocation( self.glProgram, 'texScale' )
-        }
-        
-        gl.glUniform2f( self.glUniformLocations['texOffset'], 0, 0 )
-        gl.glUniform2f( self.glUniformLocations['texScale'], 1, 1 )
-        
-        # Build data
-        #data = np.zeros((4, 2), dtype=np.float32)
-        # From another -
-        data = np.zeros(4, [("position", np.float32, 2),("uv", np.float32, 2)])
-        data['position'] = [(-1,+1), (+1,+1), (-1,-1), (+1,-1)]
-        data['uv'] = [(0,0), (1,0), (0,1), (1,1)]
-
-        indices = [0, 1, 2, 2, 3, 0]
-        indices = np.array(indices, dtype=np.uint32)
-        
-        
-        
-        self.VBO = gl.glGenBuffers(1)
-        gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.VBO)
-        gl.glBufferData(gl.GL_ARRAY_BUFFER, data.itemsize * len(data), data, gl.GL_STATIC_DRAW)
-
-        self.EBO = gl.glGenBuffers(1)
-        gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, self.EBO)
-        gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, indices.itemsize * len(indices), indices, gl.GL_STATIC_DRAW)
-        
-
-        stride = data.strides[0]
-        offset = ctypes.c_void_p(0)
-        loc = gl.glGetAttribLocation(program, "position")
-        gl.glEnableVertexAttribArray(loc)
-        gl.glVertexAttribPointer(loc, 2, gl.GL_FLOAT, False, stride, offset)
-        
-        
- 
-        texCoords = gl.glGetAttribLocation(program, "uv")
-        gl.glVertexAttribPointer(texCoords, 2, gl.GL_FLOAT, False,  stride, ctypes.c_void_p(8))
-        gl.glEnableVertexAttribArray(texCoords)
-    
-        self.displayImage = self.loadImageTex2D( self.glTempTex )
-        
-        gl.glEnable(gl.GL_TEXTURE_2D)
-        
-        
-        gl.glViewport(0, 0, 512, 512) # Out res is [512,512] setting by default
-        print("GL Init")
-        
-    def paintGL(self):
-        #self.drawGL()
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-        
-    def resizeGL(self, w, h):
-        gl.glViewport(0, 0, w, h)
-    def fitBounds(self,bounds=None):
-        if type(bounds) != type(None):
-            overScale=1.2
-            sizeXY = [ bounds[2]-bounds[0], bounds[3]-bounds[1] ]
-            size=max(sizeXY[0],sizeXY[1])*overScale
-            corner = [(bounds[0]+bounds[2])*.5 - size*.5,(bounds[1]+bounds[3])*.5 - size*.5]
-            toOffsetX = corner[0]/self.imgWidth
-            toOffsetY = corner[1]/self.imgHeight
-            toScaleX = size/self.imgWidth
-            toScaleY = size/self.imgHeight
-            self.imageOffset( toOffsetX, toOffsetY )
-            self.imageScale( toScaleX, toScaleY )
-            self.update()
-    def imageOffset(self,x,y, setOffset=True):
-        if 'texOffset' in self.glUniformLocations :
-            gl.glUniform2f( self.glUniformLocations['texOffset'], x, y )
-            if setOffset :
-                self.curOffset=[x,y]
-    def imageScale(self,x,y, setScale=True):
-        if 'texScale' in self.glUniformLocations :
-            gl.glUniform2f( self.glUniformLocations['texScale'], x, y )
-            if setScale :
-                self.curScale=[x,y]
-            
-            
 # -- -- -- -- -- -- -- -- -- -- -- -- -- --
 # -- -- -- -- -- -- -- -- -- -- -- -- -- --
 # -- -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -1156,8 +919,6 @@ class TextureGLWidget(QtOpenGL.QGLWidget):
 #   But I'm incorrigible
 class FolderListItem(QWidget):
     def __init__(self,parent = None):
-        #super(TextureGLWidget,self).__init__()
-        #QListWidgetItem.__init__(self,parent)
         super(FolderListItem, self).__init__(parent)
         
         self.fullPath = ""
@@ -1227,8 +988,6 @@ class FolderListItem(QWidget):
 
 class FileListItem(QWidget):
     def __init__(self, id = None, parent = None):
-        #super(TextureGLWidget,self).__init__()
-        #QListWidgetItem.__init__(self,parent)
         super(FileListItem, self).__init__(parent)
         
         self.id=id
@@ -1292,6 +1051,20 @@ class ImageLabelerProject(QWidget):
         super(ImageLabelerProject, self).__init__(parent)
         self.manager = parent
         
+        
+        self.mouseLocked = False
+        self.mousePos = None
+        self.mouseDelta = QtCore.QPoint(0,0)
+        
+        # Self Geometry Store
+        self.geometryStore = None
+        # Lower Shelf Geometry Store ... Eh.... I'll fix this later
+        self.lShelfGeometryStore = None
+        self.ulShelfAdjustLocked = False
+        
+        # Minimum size of Lower Shelf
+        self.minLowShelfSize = 150
+        
         self.resizeTimer = QtCore.QTimer(self)
         self.resizeTimer.setSingleShot(True)
         
@@ -1302,6 +1075,8 @@ class ImageLabelerProject(QWidget):
         self.curPromptField = None
         self.curFolderPath = None
         self.curRawPixmap = None
+        
+        
         
         
         self.imagePrompter = "BLIP"
@@ -1322,7 +1097,11 @@ class ImageLabelerProject(QWidget):
         self.projectDataJson = ""
         self.projectSettingsJson = ""
         self.setAcceptDrops(True)
- 
+
+    # -- -- -- -- -- -- -- -- -- -- -- -- -- --
+    # -- User Interaction Helper Functions - -- --
+    # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+    
     def keyPressEvent(self, event):
         #print(event)
         if event.key() == QtCore.Qt.Key_Delete :
@@ -1346,7 +1125,29 @@ class ImageLabelerProject(QWidget):
             QApplication.quit()
         event.accept()
         
+    def mousePressEvent(self, e):
+        self.mouseLocked = True
+        #print("Mouse Press")
+        # Prevent massive jump in shelf adjustments -
+        self.mousePos = e.pos()
+        self.mouseDelta = QtCore.QPoint(0,0)
+    def mouseReleaseEvent(self, e):
+        self.mouseLocked = False
+        #print("Mouse Release")
+        if self.ulShelfAdjustLocked:
+            self.ulShelfAdjustRelease()
+        
+    def mouseMoveEvent(self, e):
+        if self.mousePos != None and self.mouseLocked:
+            self.mouseDelta = e.pos() - self.mousePos
+            #print("Mouse Mouse! UL Shelf Lock - " + str(self.ulShelfAdjustLocked) +", Delta ["+str(self.mouseDelta.x())+","+str(self.mouseDelta.y())+"]" )
+            #print("Mouse Mouse! UL Shelf Lock - " + str(self.ulShelfAdjustLocked) +", Delta ["+str(self.mouseDelta.x())+","+str(self.mouseDelta.y())+"]" )
+            if self.ulShelfAdjustLocked:
+                self.ulShelfResize()
+        self.mousePos = e.pos()
 
+
+    # File & Folder Drag Drop Support 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.accept()
@@ -1368,6 +1169,10 @@ class ImageLabelerProject(QWidget):
                 curFolderItemWidget.setSizeHint(curFileItem.sizeHint())
                 self.folderList.addItem(curFolderItemWidget)
                 self.folderList.setItemWidget(curFolderItemWidget, curFileItem)
+            
+    # -- -- -- -- -- -- 
+    # -- UI Creation -- --
+    # -- -- -- -- -- -- -- --
             
     def setupUI(self):
         # setting up the geometry
@@ -1419,25 +1224,33 @@ class ImageLabelerProject(QWidget):
         self.upperShelfWidget.setLayout(upperShelfLayout)
         self.upperShelfWidget.setMinimumWidth( 512 )
         self.upperShelfWidget.setMinimumHeight( 512 )
-        self.upperShelfWidget.setSizePolicy( QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding )
+        self.upperShelfWidget.setSizePolicy( QSizePolicy.MinimumExpanding, QSizePolicy.Expanding )
         mainLayout.addWidget(self.upperShelfWidget)
+        
         # -- -- --
-        line = QLabel('', self)
-        line.setMaximumHeight(1)
-        line.setStyleSheet("background-color:#555555;")
-        line.setContentsMargins(0,3,0,3)
-        mainLayout.addWidget(line)
+        
+        # Change Upper / Lower shelf size adjuster 
+        self.ulShelfSeparator = QPushButton('', self)
+        self.ulShelfSeparator.setToolTip('Change Shelf Sizes')
+        self.ulShelfSeparator.pressed.connect(self.ulShelfSeparator_onPressed)
+        #self.ulShelfSeparator.released.connect(self.ulShelfSeparator_onReleased)
+        self.ulShelfSeparator.setMaximumHeight(3)
+        self.ulShelfSeparator.setStyleSheet("background-color:#555555;")
+        self.ulShelfSeparator.setCursor(QtGui.QCursor(QtCore.Qt.SplitVCursor))
+        self.ulShelfSeparator.setContentsMargins(0,3,0,3)
+        mainLayout.addWidget(self.ulShelfSeparator)
+        
         # -- -- --
+        
         # Lower Shelf, Block 3 & 4
-        lowShelfWidget = QWidget()
-        lowShelfWidget.setMinimumHeight(512)
-        lowShelfWidget.setMaximumHeight(512)
+        self.lowShelfWidget = QWidget()
+        self.lowShelfWidget.setFixedHeight(512)
         lowShelfLayout = QHBoxLayout()
         lowShelfLayout.setAlignment(QtCore.Qt.AlignCenter)
         lowShelfLayout.setContentsMargins(0,0,0,0)
         lowShelfLayout.setSpacing(1)
-        lowShelfWidget.setLayout(lowShelfLayout)
-        mainLayout.addWidget(lowShelfWidget)
+        self.lowShelfWidget.setLayout(lowShelfLayout)
+        mainLayout.addWidget(self.lowShelfWidget)
         
         # -- -- --
         
@@ -1479,26 +1292,28 @@ class ImageLabelerProject(QWidget):
         currentDataBlockLayout.setContentsMargins(0,0,0,0)
         currentDataBlockLayout.setSpacing(1)
         currentDataBlock.setLayout(currentDataBlockLayout)
-        lowShelfLayout.addWidget(currentDataBlock)
+        upperShelfLayout.addWidget(currentDataBlock)
         
         # -- -- --
+        
         line = QLabel('', self)
         line.setMaximumWidth(5)
         line.setStyleSheet("background-color:#555555;")
         line.setContentsMargins(3,0,3,0)
         lowShelfLayout.addWidget(line)
+        
         # -- -- --
         
         # Block 4
-        glBlock = QWidget()
-        glBlock.setMinimumWidth(512)
-        glBlock.setMaximumWidth(512)
-        glBlockLayout = QHBoxLayout()
-        glBlockLayout.setAlignment(QtCore.Qt.AlignCenter)
-        glBlockLayout.setContentsMargins(0,0,0,0)
-        glBlockLayout.setSpacing(1)
-        glBlock.setLayout(glBlockLayout)
-        lowShelfLayout.addWidget(glBlock)
+        self.glBlock = QWidget()
+        self.glBlock.setMinimumWidth(512)
+        self.glBlockLayout = QHBoxLayout()
+        self.glBlockLayout.setAlignment(QtCore.Qt.AlignCenter)
+        self.glBlockLayout.setContentsMargins(0,0,0,0)
+        self.glBlockLayout.setSpacing(1)
+        self.glBlock.setLayout(self.glBlockLayout)
+        self.glBlock.setSizePolicy( QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding )
+        lowShelfLayout.addWidget(self.glBlock)
         
         # -- -- --
         line = QLabel('', self)
@@ -1565,27 +1380,6 @@ class ImageLabelerProject(QWidget):
         self.curFolderPath = self.folderList.itemWidget(self.curFolderListItem).fullPath
         self.rebuildFileList(self.curFolderPath)
         
-        # -- -- --
-        """
-        fileListButtonBlock = QWidget()
-        fileListButtonBlock.setFixedHeight(30)
-        fileListButtonLayout = QHBoxLayout()
-        fileListButtonLayout.setAlignment(QtCore.Qt.AlignCenter)
-        fileListButtonLayout.setContentsMargins(1,1,1,1)
-        fileListButtonLayout.setSpacing(2)
-        fileListButtonBlock.setLayout(fileListButtonLayout)
-        currentFileBlockLayout.addWidget(fileListButtonBlock)
-        
-        delFileButton = QPushButton('Find Face', self)
-        findFaceButton.setToolTip('Auto Find Face; Face Helper')
-        findFaceButton.clicked.connect(findFaceButton_onClick)
-        fileListButtonLayout.addWidget(findFaceButton)
-        
-        updateCropButton = QPushButton('Update Crop', self)
-        updateCropButton.setToolTip('Auto Find Face; Face Helper')
-        updateCropButton.clicked.connect(self.updateCropButton_onClick)
-        fileListButtonLayout.addWidget(updateCropButton)
-        """
     
         # -- -- -- -- -- -- -- -- -- -- --
         # -- -- -- -- -- -- -- -- -- -- --
@@ -1702,9 +1496,39 @@ class ImageLabelerProject(QWidget):
         
         # -- -- --
         
+        
+        
+        
         # -- -- -- -- -- -- -- -- -- -- --
-        # Current Found Image Data Block
-        #   eg, Cropped Face & Aligned Crop Face
+        # -- -- -- -- -- -- -- -- -- -- --
+        # -- -- -- -- -- -- -- -- -- -- --
+        
+        
+        self.curImageCropsBlock = QWidget()
+        self.curImageCropsLayout = QVBoxLayout()
+        self.curImageCropsLayout.setAlignment(QtCore.Qt.AlignCenter)
+        self.curImageCropsLayout.setContentsMargins(0,0,0,0)
+        self.curImageCropsLayout.setSpacing(1)
+        self.curImageCropsBlock.setLayout(self.curImageCropsLayout)
+        
+        self.curImageCropsScrollable = QScrollArea()
+        self.curImageCropsScrollable.setMaximumWidth(512)
+        self.curImageCropsScrollable.setMinimumWidth(200)
+        self.curImageCropsScrollable.setMinimumHeight(200)
+        self.curImageCropsScrollable.setVerticalScrollBarPolicy( QtCore.Qt.ScrollBarAlwaysOn )
+        self.curImageCropsScrollable.setHorizontalScrollBarPolicy( QtCore.Qt.ScrollBarAlwaysOff )
+        #self.curImageCropsScrollable.verticalScrollBar().valueChanged.connect( self.scrollAreaUpdate )
+        
+        self.curImageCropsScrollable.setWidgetResizable(True)
+        self.curImageCropsScrollable.setWidget( self.curImageCropsBlock )
+        
+        currentDataBlockLayout.addWidget( self.curImageCropsScrollable )
+         
+        
+        # -- -- -- -- -- -- -- -- -- -- --
+        
+        # Face Finder Layouts
+        #   Display current Image's found aligned & unaligned faces
         
         curImageDataBlock = QWidget()
         self.curImageDataLayout = QVBoxLayout()
@@ -1712,12 +1536,12 @@ class ImageLabelerProject(QWidget):
         self.curImageDataLayout.setContentsMargins(1,1,1,1)
         self.curImageDataLayout.setSpacing(2)
         curImageDataBlock.setLayout(self.curImageDataLayout)
-        currentDataBlockLayout.addWidget(curImageDataBlock)
+        self.curImageCropsLayout.addWidget(curImageDataBlock)
 
         # -- -- --
         
         cropFacesBlock = QWidget()
-        self.cropFacesLayout = QHBoxLayout()
+        self.cropFacesLayout = QVBoxLayout()
         self.cropFacesLayout.setAlignment(QtCore.Qt.AlignCenter)
         self.cropFacesLayout.setContentsMargins(1,1,1,1)
         self.cropFacesLayout.setSpacing(2)
@@ -1754,15 +1578,39 @@ class ImageLabelerProject(QWidget):
         faceImageUnalignedLayout.addWidget(self.faceUnalignedImage)
         
         
+        
+        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # -- -- -- -- -- -- -- -- -- -- --
+        # -- -- -- -- -- -- -- -- -- -- --
+        
+        
+        
+        
         # -- -- -- -- -- -- -- -- -- -- --
         # Current GL Loaded File Layout Block
-        #self.glTexture = TextureGLWidget(self)
-        self.glTexture = TextureGLWidget(self)
-        #self.glTexture.initializeGL()
-        self.glTexture.resize( pixres[0], pixres[1] )
-        #self.glTexture.move( pixoffset[0]+pixres[0] + pad, pixoffset[1] )
-        #self.glTexture.update
-        glBlockLayout.addWidget(self.glTexture)
+        
+        glSaveRenderPath = os.path.join( ImageLabelerScriptDir, "ViewportGLSaves" )
+        
+        self.glSmartBlur = ViewerGL.ViewportWidget(self,0,"smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
+        #self.glSmartBlur.resize( pixres[0], pixres[1] )
+        self.glBlockLayout.addWidget(self.glSmartBlur)
+        self.glSmartBlur.imageOffset(pixres[0], pixres[1])
+        # -- -- --
+        self.glEdgeFinding = ViewerGL.ViewportWidget(self,1,"edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", saveImagePath=glSaveRenderPath )
+        #self.glEdgeFinding.resize( pixres[0], pixres[1] )
+        self.glBlockLayout.addWidget(self.glEdgeFinding)
+        self.glEdgeFinding.imageOffset(pixres[0], pixres[1])
+        # -- -- --
+        self.glSegmentation = ViewerGL.ViewportWidget(self,2,"segment", "assets/glSegmentation_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
+        #self.glSegmentation = ViewerBufferGL.ViewportBufferWidget(self,2,"segment", "assets/glSegmentation_tmp1_alpha.png" )
+        #self.glSegmentation.resize( pixres[0], pixres[1] )
+        self.glBlockLayout.addWidget(self.glSegmentation)
+        self.glSegmentation.imageOffset(pixres[0], pixres[1])
+        # -- -- --
+        self.glTexture = ViewerGL.ViewportWidget(self,3,"default", saveImagePath=glSaveRenderPath )
+        #self.glTexture.resize( pixres[0], pixres[1] )
+        self.glBlockLayout.addWidget(self.glTexture)
         self.glTexture.imageOffset(pixres[0], pixres[1])
         
         
@@ -1794,10 +1642,10 @@ class ImageLabelerProject(QWidget):
         # -- -- --
         cropButtonsBlockLayout.addStretch(1)
         # -- -- --
-        self.saveButton = QPushButton('Save Crop', self)
-        self.saveButton.setToolTip('Save cropped image above')
-        self.saveButton.clicked.connect(self.saveButton_onClick)
-        glSettingsBlockLayout.addWidget(self.saveButton)
+        self.saveCropButton = QPushButton('Save Crop', self)
+        self.saveCropButton.setToolTip('Save cropped image above')
+        self.saveCropButton.clicked.connect(self.saveCropButton_onClick)
+        glSettingsBlockLayout.addWidget(self.saveCropButton)
         # -- -- --
         cropButtonsBlockLayout.addStretch(1)
         
@@ -1824,10 +1672,72 @@ class ImageLabelerProject(QWidget):
         # Connect Resize Timer Function
         self.resizeTimer.timeout.connect(self.fitRawResizeTimeout) 
     
+        self.geometryStore = self.geometry()
+        print( self.geometryStore )
     
     def resize(self):
         self.fitRawPixmapToView(True)
         self.glTexture.update()
+        
+        
+        
+    # -- -- -- -- -- -- -- -- -- -- -- --
+    # -- UI Event Listener Functions - -- --
+    # -- -- -- -- -- -- -- -- -- -- -- -- -- --
+        
+        
+        
+    @QtCore.pyqtSlot()
+    def ulShelfSeparator_onPressed(self):
+        self.ulShelfAdjustLocked = True
+        #print("UL Shelf Adjust Pressed! UL Shelf Lock - " + str(self.ulShelfAdjustLocked) )
+        # Eh, don't feel like making a custome QPushButton right now...
+        self.mouseLocked = True
+        # Prevent massive jump in shelf adjustments -
+        #self.mousePos = e.pos()
+        self.mouseDelta = QtCore.QPoint(0,0)
+        self.geometryStore = self.geometry()
+        self.lShelfGeometryStore = self.lowShelfWidget.geometry()
+        
+    @QtCore.pyqtSlot()
+    def ulShelfSeparator_onReleased(self):
+        if not self.mouseLocked:
+            self.ulShelfAdjustRelease()
+    def ulShelfResize(self):
+        #print( self.mouseLocked )
+        if self.mouseLocked:
+            #print( "Mouse Pos - ["+ str(self.mousePos.x()) +","+str(self.mousePos.y())+"]" )
+            #print( "Mouse Delta - ["+ str(self.mouseDelta.x()) +","+str(self.mouseDelta.y())+"]" )
+            
+            shiftHeight = 3
+            #
+            """
+            lowShelfTop = self.lowShelfWidget.geometry().top()
+            lowShelfHeight = self.lowShelfWidget.geometry().height() - shiftHeight
+            # Geometry().bottom() is off by 1 pixel, documentation states
+            lowShelfBottom = lowShelfTop + lowShelfHeight
+            lBottomToMouse = lowShelfBottom - self.mousePos.y()
+            lBottomToMouse = max( self.minLowShelfSize , lBottomToMouse )
+            """
+            
+            # Geometry().bottom() is off by 1 pixel, documentation states
+            lowShelfBottom = self.lShelfGeometryStore.bottom()
+            lBottomToMouse = lowShelfBottom - self.mousePos.y()
+            lBottomToMouse = max( self.minLowShelfSize , lBottomToMouse )
+            
+            
+            #print("To Size - "+str(lBottomToMouse))
+            self.lowShelfWidget.setFixedHeight( lBottomToMouse )
+            
+            self.upperShelfWidget.adjustSize()
+            self.setGeometry( self.geometryStore )
+            
+    def ulShelfAdjustRelease(self):
+            self.ulShelfAdjustLocked = False
+            print("UL Shelf Adjust Released! UL Shelf Lock - " + str(self.ulShelfAdjustLocked) )
+        
+        
+        
         
     @QtCore.pyqtSlot()
     def removeImageEntryButton_onClick(self):
@@ -2001,7 +1911,7 @@ class ImageLabelerProject(QWidget):
         self.setFocus()
             
     @QtCore.pyqtSlot()
-    def saveButton_onClick(self):
+    def saveCropButton_onClick(self):
         if self.glTexture != None :
             curBuffer = self.glTexture.grabFrameBuffer(withAlpha=False)
             curItem = self.outputClassifier.currentItem()
@@ -2075,7 +1985,13 @@ class ImageLabelerProject(QWidget):
             except:
                 pass;
             self.curPromptField.setText(curPrompt)
-        
+    
+
+    # -- -- -- -- -- -- -- -- -- --
+    # -- Primary Functionality - -- --
+    # -- -- -- -- -- -- -- -- -- -- -- --
+
+    
     def rebuildFileList(self,folderPath=None):
         self.curFolderPath = folderPath
         if self.curFolderPath == None:
@@ -2371,9 +2287,14 @@ if __name__ == '__main__':
     import sys
     from PyQt5.QtWidgets import QApplication
  
+    settingsManager = pxlSettings.UserSettingsManager("userSettings")
     # app created
     app = QApplication(sys.argv)
-    w = ImageLabelerProjectManager()
+    screen = app.primaryScreen()
+    screenRes = screen.size()
+    userScreenRes = [ screenRes.width(), screenRes.height() ]
+    
+    w = ImageLabelerProjectManager( userScreenRes, settingsManager )
     w.setupUI()
     w.show()
     
