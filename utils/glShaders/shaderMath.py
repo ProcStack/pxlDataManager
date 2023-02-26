@@ -26,22 +26,6 @@ float clamp01( float inVal ){
 """
 
 
-# Convert vec3 color to luminance
-#   Given Green prominance in eye color perception
-luma="""
-float luma(vec3 color) {
-	return dot(color,vec3(0.299, 0.587, 0.114));
-}
-"""
-
-# Convert vec3 color to raw luminance; (r+g+b)/3.0
-# TODO : Correct trailing double precision values over 1.0
-greyScale="""
-float greyScale(vec3 color) {
-	return (color[0]+color[1]+color[2])*0.3333333333333333;
-}
-"""
-
 biasToOne="""
 float biasToOne( float value ){
   return 1.0-(1.0-value)*(1.0-value);
@@ -80,6 +64,22 @@ float addComponents(vec4 val){
 """
 
 # -- -- --
+
+# Convert vec3 color to luminance
+#   Given Green prominance in eye color perception
+luma="""
+float luma(vec3 color) {
+	return dot(color,vec3(0.299, 0.587, 0.114));
+}
+"""
+
+# Convert vec3 color to raw luminance; (r+g+b)/3.0
+# TODO : Correct trailing double precision values over 1.0
+greyScale="""
+float greyScale(vec3 color) {
+	return (color[0]+color[1]+color[2])*0.3333333333333333;
+}
+"""
 
 # Rotation Vec3 to UV value
 rotToUV="""
