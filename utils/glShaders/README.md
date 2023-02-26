@@ -1,6 +1,11 @@
  ## OpenGL Shader Python Files
  #### GL Shader Files - `./utils/glShaders`
  
+Most Math & Utility functions aren't used in pxlDataManager,
+<br>&nbsp;&nbsp;They are just my ussualy swiss army knife of go-to functions
+<br>&nbsp;&nbsp;&nbsp;&nbsp;So I add them out of habbit
+
+<hr>
 
 ### `shaderMath.py`
  - General OpenGL Math Functions
@@ -27,10 +32,10 @@
    - `rgb2hsv` - Color Vec3 RGB to vec3( Hue, Sturation, Value )
    - `hsv2rgb` - HSV to RGB Vec3
  - A-to-B Blending Functions
-   - `deltaDivToBlender`
-   - `sinToBlender`
-   - `logPowToBlender`
-   - `powToBlender`
+   - `deltaDivToBlender` - Soft Out, Soft In; 3rd argument is div & subtractor bias
+   - `sinToBlender` - Linear Out, Smooth In, 3rd argument is Sine Wave Magnitude, pre 0-1 clamp
+   - `logPowToBlender` - Slower Out, Sharp In, 3rd argument is log(value, ARG)
+   - `powToBlender` - Slow Out, Slight Slow In, 3rd argument is value^ARG
  - Matrix Functions
    - `getRotationMatrix()` - Create static Rotation Matrix, 3x3 or 4x4 with optional Position Vector
 <br><br>
@@ -46,12 +51,13 @@
    - `getBoxBlur( 1, 2, or 3 )` - Returns a box blur function; with required `getBoxSamples()` constants
 <br><br>
 
+<hr>
+
 ### `defaultShader.py`
  - Default Vertex & Fragment Shaders
  - Sample & Output Texture Color
 <br><br>
 
-<hr>
 
 ### `colorCorrectShader.py` **WIP**
  - Color Correct Texture Shader
