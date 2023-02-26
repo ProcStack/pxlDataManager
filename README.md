@@ -94,12 +94,14 @@ Outside of direct influence, I'll be adding a 3d `OpenPose` posing interface.
 <br>&nbsp;&nbsp;All this outside the reliance of internet scrapped images currently used in AI models.
 
 I have no ill will toward AI researcher's scraping the internet for training material.
-<br>&nbsp;&nbsp;However, as a former feature film technical director & *still* digital creator,
-<br>&nbsp;&nbsp;&nbsp;&nbsp;I fully understand the distain from those of whom which don't want their hard work sourced as AI training material.
-<p>&nbsp;&nbsp;While I'm an open-source friendly bugger, I don't care as much for the 20+ years worth of my own work...</p>
+<br>&nbsp;&nbsp;But, as a former feature film technical director & *still* digital creator,
+<br>&nbsp;&nbsp;&nbsp;&nbsp;I fully understand the distain from those of whom which don't want their hard work sourced for AI training material.
+<br>Since I'm an open-source friendly bugger,
+<br>&nbsp;&nbsp;I don't care as much for my 20+ years of creations...
 
-**BUT**, that means I'm taking the side of my friends & co-workers before my own selfish desires.
-<br>*Live and let Live*
+**However**,
+<br>&nbsp;&nbsp;That means I'm taking the side of my friends & co-workers before my own selfish desires.
+<br>*<span style="font-size:120%;">&nbsp;&nbsp;&nbsp;&nbsp;Live and let Live</span>*
 <p>I'd like to imagine, while you have access to the `pxlDataManager` toolkit,
 <br>&nbsp;&nbsp;You'll make forthright judgement calls for the betterment of AI as a whole.</p>
 <br/>
