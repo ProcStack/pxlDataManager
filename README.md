@@ -4,7 +4,20 @@
 This repo contains a set of different stand-alone tools to organize, label, and apply image tweeks in aid of training material preperation and the training process for AI Models, Textural Inversion, and Hyper Networks.
 
 Along with general aid for image viewing, modifications, and other tools I've needed in my day to day in texturing pipelines.
+<br/>
+<br/>
 
+## Notes of Warning
+### As of Feb. 26th, 2023 -
+These tools were built on Python 3.10.6, PyQt5 5.15.9, Torch 1.13.1+cu117
+<br>&nbsp;&nbsp;**Do NOT `pip install XX_requirements.txt`** as I'm still figuring out the workflow for required repositories and python modules.
+<br>&nbsp;&nbsp;&nbsp;&nbsp;In the mean time, only install packages under `// Found needed --` in `XX_requirements.txt`
+
+These scripts were written on Windows, with SOME potential OS issues mitigated, some...
+<br>&nbsp;&nbsp;Which is better for cross platform usage, as there is no `glutInit()` on Windows
+<br>&nbsp;&nbsp;&nbsp;&nbsp;*Testing will be needed on Linux / MacOS.  I don't have a Linux machine strong enough to test these tools.*
+<br/>
+<br/>
 
 ## What AI access is there within pxlDataManager?
 Once setting a source folder and regressively sourcing all folders & images within the source folder,
@@ -29,8 +42,8 @@ Final implementation, *currently not added*, is to add ProcStack's altered Stabl
 For now, custom implementations are not being added to `pxlDataManager` as its out-of-date by a few months.
 <br>&nbsp;&nbsp;I'll be modularizing my alterations for an agnostic approach to AI generations.
 <br>&nbsp;&nbsp;*(Any on-the-fly repository pulls will be added soon, most likely from a ProcStack branch of the core StableDiffusion repo)*
-
-<hr>
+<br/>
+<br/>
 
 ## What's In pxlDataManager?
 *(All scripts have stand-alone PyQt5 versions, works-in-progress though.)*
@@ -48,8 +61,8 @@ For now, custom implementations are not being added to `pxlDataManager` as its o
  - `utils/ImageToPrompt.py` <br> Generate a Prompt from a provided Image. Currently only using BLIP.  Based on `clip-interrogator`
 
  - `utils/TrainingLabelGenerator.py` <br> Easy file organizations and text editor for Prompt'ed images for AI training.  <br> Will export Image + Text file pairs for easy injestion for Textural Inversion and HyperNet training.
-
-<hr>
+<br/>
+<br/>
 
 ### Future ControlNet Altered Features
 I have plans for `Frame-to-Frame Pixel Velocity` & `Pixel Rest Position` to be added into `ControlNet` injection locations.
@@ -72,8 +85,8 @@ Outside of direct influence, I'll be adding a 3d `OpenPose` posing interface.
 <br>&nbsp;&nbsp;*(Normal fixes sourced from pxlDataManager Segmentation and 3d OpenPose adjustments)*
 
 *Do realize*, this will take quite a bit of time to implement. 
-
-<hr>
+<br/>
+<br/>
 
 ## Note from the developer
 *(Nod to the current landscape)*
@@ -89,8 +102,7 @@ I have no ill will toward AI researcher's scraping the internet for training mat
 <br>*Live and let Live*
 <p>I'd like to imagine, while you have access to the `pxlDataManager` toolkit,
 <br>&nbsp;&nbsp;You'll make forthright judgement calls for the betterment of AI as a whole.</p>
-
-<hr>
+<br/>
 
 File organization & managment for training purposes may get into the 10's-100's of thousands.  Yeilding the need for this toolkit.
 <br>&nbsp;&nbsp;Easy indexing, `Project`-ifying of source material, and quick image alterations in lieu of running AI generations.
@@ -106,11 +118,3 @@ All ControlNet scripts being added currently are designed to be a pre-process sy
 <br>&nbsp;&nbsp;Mostly for retaining the breadcrumb trail of required repos for functionality of those extention scripts.
 <br>&nbsp;&nbsp;&nbsp;&nbsp;*(To be added soon)*
 
-
-## Notes of Warning
-#### As of Feb. 21st, 2023 -
-**These tools were built on Python 3.10.6, PyQt5 5.15.9, Torch 1.13.1+cu117**
-<br>**Do NOT pip install `XX_requirements.txt` as I'm still figuring out the workflow for required repositories and python modules.**
-
-**These scripts were written on Windows, with SOME potential OS issues mitigated, some...**
-<br>**Testing will be needed on Linux / MacOS.  But I don't have a Linux machine strong enough to test these tools.**
