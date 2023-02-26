@@ -80,11 +80,11 @@ I have no ill will toward AI researcher's scraping the internet for training mat
 <br>&nbsp;&nbsp;However, as a former feature film technical director & *still* digital creator,
 <br>&nbsp;&nbsp;&nbsp;&nbsp;I fully understand the distain from those of whom which don't want their hard work sourced as AI training material.
 <p>While I'm an open-source friendly bugger, I don't care as much for the 20+ years worth of my own work...</p>
-<p>**BUT**, that means I'm taking the side of my friends & co-workers before my own selfish desires.</p>
-<p>*Live and let Live*</p>
 
-<br>I'd like to imagine, while you have access to the `pxlDataManager` toolkit,
-<br>&nbsp;&nbsp;You'll make forthright judgement calls for the betterment of AI as a whole.
+**BUT**, that means I'm taking the side of my friends & co-workers before my own selfish desires.
+<br>*Live and let Live*
+<p>I'd like to imagine, while you have access to the `pxlDataManager` toolkit,
+<br>&nbsp;&nbsp;You'll make forthright judgement calls for the betterment of AI as a whole.</p>
 
 <hr>
 
