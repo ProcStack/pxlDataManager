@@ -1,6 +1,28 @@
 # Its shaders like this that makes me think I should just
 #   Extend the `TextureGLWidget()` class
 #     Yay...
+#
+# Segmentation Shader sets FBO requirements and Buffer Swapping
+#   Determined below with -
+#     uniforms["bufferRefTex"]["type"] = "fbo"
+#       FBO swap, using the same Shader Program
+#
+# Primary source texture -
+#   `uniform sampler2D samplerTex;`
+# Data Pass, FBO feedback -
+#   `uniform sampler2D bufferRefTex;`
+#
+# Fragment Shader below uses uniform `isFBO` variable to determine
+#   Out color `out vec4 outColor` fbo or to-screen render
+# In `ViewportGL.py` -
+#   See `buildUniforms()`, `newFrameBuffer()`, and `paintGL()` for usage of -
+#     RGBA - FBO, FBO Texture, and Screen Render
+#
+# Do note --
+#   This shader was created with ill-regard for FPS
+#     Nested For-Loops and multiple "box" sampling per texel per frame
+#       FPS has been disregarded for the whole of pxlDataManager
+
 
 import os, sys
 from random import random
@@ -92,7 +114,6 @@ uniforms = {
     "segmentSeeds" : {
         "type":"vec3[]",
         "default":segmentSeedDictList,
-        #"control":"struct"
         "control":"visible"
     },
     "isFBO" : {
@@ -126,6 +147,8 @@ vertex = '''
     }
 '''
 
+# -- -- --
+
 # Max Seed Count Read Array
 #   uniform vec3 segmentSeeds[#} = Region,Color,Pos, Region,Color,Pos, .....
 # TODO : Add dynamic User Defined Region Positions
@@ -135,6 +158,8 @@ vertex = '''
 segSeedRun = '3'
 # Existing Default Seed List Size * Run Size
 segSeedCount = str( len(segmentSeedDictList) * 3 )
+
+# -- -- --
 
 
 # -- -- -- -- -- -- --
@@ -181,8 +206,26 @@ fragment = '''
     //   `clamp()` introduced in OpenGL4 / OpenGLES3
     //     Currently using OpenGL 330
     // TODO : Any reason not to use `#version 420` ???
-    //          Find limiting hardware for later GL versions
+    //          Find limited hardware for later GL versions
     ''' + clamp01() + '''
+
+    vec4 reagionReachSample( sampler2D tx, vec2 uv ){
+      vec4 sampleCd = texture2D(tx, uv);
+      
+      vec2 curUV;
+      vec2 curId;
+      float curUVDist=0.0;
+      vec4 curCd;
+      vec3 curMix;
+      float delta=0.0;
+      for( int x=0; x<boxSamplesCount; ++x){
+        curUV =  uv + boxSamples[x]*texelRes ;
+            
+        curCd = texture2D(tx, curUV);
+        sampleCd = mix( sampleCd, curCd, .5);
+      }
+      return sampleCd;
+    }
 
     void main() {
         vec2 scaledUv = vUv * (texScale*0.0+vec2(1.0,1.0)) + texOffset*0.0 + texelSize*.00;
@@ -192,6 +235,9 @@ fragment = '''
         // I don't like using If-Else's
         //   But Uniforms don't cause desync in gpu cores
         //     Still annoys me though...
+        //       And too lazy to make another shader program for swap
+        //         Eh, not lazy, just know it'll reveal more issues
+        //           In PyOpenGL....
         if( isFBO>0.5 ){ // Data Pass
         
             int REGION_WEIGHT = 0;
@@ -203,10 +249,12 @@ fragment = '''
             int x=0;
             int c=0;
             float curDisToSeed = 0.0;
-            vec2 reachMult = vec2( 1.0, 1.0 );
+            vec2 reachMult = texelSize * vec2( 1.0, 1.0 );
+            vec4 regionSample;
             
             // Prior frame allowed current frame influence
-            float inWeight = 1.0-dataCd.a; 
+            float inWeight = 1.0-dataCd.a;
+            float inWeight = 1.0-dataCd.a;
             
             for( x=0; x<SEGMENT_SEED_COUNT; x=x+'''+segSeedRun+'''){
                 vec2 curRegionWeight = segmentSeeds[ x + REGION_WEIGHT ].xy;
@@ -215,8 +263,8 @@ fragment = '''
                 
                 // Neighbor Sampler
                 for( c=0; c<boxSamplesCount; ++c){
-                    vec2 reachPos = vUv + boxSamples[c] * reachMult
-                    texelSize
+                    vec2 reachPos = vUv + boxSamples[c] * reachMult;
+                    regionSample = reagionReachSample( bufferRefTex, vec2 uv, vec2 texelRes);
                 }
                 
                 // curDisToSeed = max(curDisToSeed, max(0.0, 1.0-length( vUv - curSeedPos )/seedDist));

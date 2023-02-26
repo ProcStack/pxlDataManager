@@ -1,4 +1,4 @@
-# pxlImageManager v0.0.2
+# pxlDataManager v0.0.2
 ### PyQt5 Image Organization, Effects, & AI Prep Toolkit
 
 This repo contains a set of different stand-alone tools to organize, label, and apply image effects to aid in the preperation and training process of AI Models, Textural Inversion, and Hyper Networks.  Along with general aid for image viewing, modifications, and other tools I've needed from day to day in texturing pipelines.
@@ -14,10 +14,10 @@ All ControlNet scripts being added currently are designed to be a pre-process sy
 <br>Mostly for retaining the breadcrumb trail of required repos for functionality of those extention scripts.
 <br>(To be added soon)
 
-## What's In pxlImageManager?
+## What's In pxlDataManager?
 *(All scripts have stand-alone PyQt5 versions, works-in-progress though.)*
 
-`pxlImageManager.py` - **MAIN**; Primary Image Organization Manager; Import folder hierarchies of images for easy viewing, including all below image and file tools. While also organizing the outputs from all the scripts below in `./Projects/PROJECT_NAME`
+`pxlDataManager.py` - **MAIN**; Primary Image Organization Manager; Import folder hierarchies of images for easy viewing, including all below image and file tools. While also organizing the outputs from all the scripts below in `./Projects/PROJECT_NAME`
 
 `ControlNetGenerator.py` - **WIP** ControlNet Preprocessors; Generate and alter ControlNet data prior to AI usage.
 
@@ -25,7 +25,7 @@ All ControlNet scripts being added currently are designed to be a pre-process sy
 
 `FaceFinder.py` - Find, Isolate, and Align faces in provided images. Based on `GFPGAN`
 
-`FileIngester.py` - Load all found files within directories for adding arbitrary data.  This creates JSON dictionary files with any custom user data saved.  This extends the limitations of image META data, but only within the `FileIngester.py` / `pxlImageManager.py` pipelines.
+`FileIngester.py` - Load all found files within directories for adding arbitrary data.  This creates JSON dictionary files with any custom user data saved.  This extends the limitations of image META data, but only within the `FileIngester.py` / `pxlDataManager.py` pipelines.
 
 `ImageToPrompt.py` - Generate a Prompt from a provided Image. Currently only using BLIP.  Based on `clip-interrogator`
 
