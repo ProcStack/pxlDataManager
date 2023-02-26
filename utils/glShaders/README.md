@@ -1,30 +1,38 @@
- ## OpenGL Shader Python Files; `./utils/glShaders`
+ ## OpenGL Shader Python Files
+ #### GL Shader Files - `./utils/glShaders`
  
 
 ### `shaderMath.py`
  - General OpenGL Math Functions
  - Program `#defines`
-   - `def_PI` - Pi Define
-   - `def_TAU` - Tau Define ( Pi x 2 )
+   - `def_PI` - `#define PI`
+   - `def_TAU` - `#define TAU` *( Pi x 2 )*
  - Variable Value Functions
-   - `clamp`
-   - `clamp01`
+   - `clamp` - `clamp( VALUE, MIN, MAX )`
+     - *(Prior to OpenGL 4 / OpenGL ES 3, `clamp()` doesn't exist)*
+   - `clamp01`- `clamp01( VALUE )`
    - `biasToOne`
-   - `maxComponent`
-   - `addComponents`
-   - `rotToUV`
+     - `biasToOne( VALUE )` - 1 - ( VALUE * VALUE ), Biasing to 1.0
+     - `biasToOne( VALUE, BIAS )` - 1 - ( (VALUE*BIAS) * (VALUE*BIAS) ), Biasing to 1.0 with BIAS multiplier
+   - `maxComponent` - Maximum component of provided `vec2`, `vec3`, or `vec4`
+   - `addComponents` - Add all components of provided `vec2`, `vec3`, or `vec4`
+   - `rotToUV` - Vec3 direction vector to UV Vec2
+     - Useful for casting Normalized Direction Vector to Texture Space
+       - eg. Camera direction to Texture for 360 sphere
+       - eg. Surface Reflection Vector to Texture for PBR environment map
  - Color Space Changing Functions
-   - `luma`
-   - `greyScale`
-   - `rgb2hsv`
-   - `hsv2rgb`
+   - `luma` - Color Vec3 to Greyscale with color prominance adjustment
+     - Visually looks like Color to Actual Greyscale, but isn't
+   - `greyScale`- Raw Color Vec3 to Literal Greyscale
+   - `rgb2hsv` - Color Vec3 RGB to vec3( Hue, Sturation, Value )
+   - `hsv2rgb` - HSV to RGB Vec3
  - A-to-B Blending Functions
    - `deltaDivToBlender`
    - `sinToBlender`
    - `logPowToBlender`
    - `powToBlender`
  - Matrix Functions
-   - `getRotationMatrix()`
+   - `getRotationMatrix()` - Create static Rotation Matrix, 3x3 or 4x4 with optional Position Vector
 <br><br>
 
 ### `shaderUtils.py`
