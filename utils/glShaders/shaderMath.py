@@ -36,9 +36,9 @@ float luma(vec3 color) {
 
 # Convert vec3 color to raw luminance; (r+g+b)/3.0
 # TODO : Correct trailing double precision values over 1.0
-greyScale=f"""
+greyScale="""
 float greyScale(vec3 color) {
-	return (color[0]+color[1]+color[2])*{1.0/3.0};
+	return (color[0]+color[1]+color[2])*0.3333333333333333;
 }
 """
 
@@ -166,7 +166,7 @@ float PowTo(float s1, float s2, float k){  // k => 0.0 - 9.0
 # TODO : Add function to return a dynamically generated rotation matrix
 
 # Return a 3x3 or 4x4 matrix with given rotation and optional positional values
-def getRotationMatrix( matName="xRotMat", rotAxis="x", matSize="3x3", rotVal=-1.5707963267948966, posVal=None )
+def getRotationMatrix( matName="xRotMat", rotAxis="x", matSize="3x3", rotVal=-1.5707963267948966, posVal=None ):
     import math
     rotAxis = rotAxis.lower()
     
@@ -187,8 +187,9 @@ def getRotationMatrix( matName="xRotMat", rotAxis="x", matSize="3x3", rotVal=-1.
     curPosVal = []
     if isVec4:
         if type(posVal) == None:
+            curPosVal = [0.0,0.0,0.0,1.0]
         else:
-        curPosVal = posVal.copy()
+            curPosVal = posVal.copy()
         if isVec4 and len(curPosVal) == 3:
             curPosVal.append(1.0)
         curPosVal = """,

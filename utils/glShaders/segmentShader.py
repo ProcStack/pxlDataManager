@@ -207,9 +207,9 @@ fragment = '''
     //     Currently using OpenGL 330
     // TODO : Any reason not to use `#version 420` ???
     //          Find limited hardware for later GL versions
-    ''' + clamp01() + '''
+    ''' + clamp01 + '''
 
-    vec4 reagionReachSample( sampler2D tx, vec2 uv ){
+    vec4 reagionReachSample( sampler2D tx, vec2 uv, vec2 texelRes ){
       vec4 sampleCd = texture2D(tx, uv);
       
       vec2 curUV;
@@ -254,7 +254,6 @@ fragment = '''
             
             // Prior frame allowed current frame influence
             float inWeight = 1.0-dataCd.a;
-            float inWeight = 1.0-dataCd.a;
             
             for( x=0; x<SEGMENT_SEED_COUNT; x=x+'''+segSeedRun+'''){
                 vec2 curRegionWeight = segmentSeeds[ x + REGION_WEIGHT ].xy;
@@ -262,10 +261,10 @@ fragment = '''
                 vec3 curSeedColor = segmentSeeds[ x + SEED_COLOR ];
                 
                 // Neighbor Sampler
-                for( c=0; c<boxSamplesCount; ++c){
-                    vec2 reachPos = vUv + boxSamples[c] * reachMult;
-                    regionSample = reagionReachSample( bufferRefTex, vec2 uv, vec2 texelRes);
-                }
+                //for( c=0; c<boxSamplesCount; ++c){
+                //    vec2 reachPos = vUv + boxSamples[c] * reachMult;
+                //    regionSample = reagionReachSample( bufferRefTex, vUv, reachMult);
+                //}
                 
                 // curDisToSeed = max(curDisToSeed, max(0.0, 1.0-length( vUv - curSeedPos )/seedDist));
                 // float colorStep = step( curDisToSeed, disToSeed );
