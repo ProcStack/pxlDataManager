@@ -78,7 +78,16 @@ class TextureGLWidget(QtOpenGL.QGLWidget):
         self.bufferRefImage = None
         self.runner = 0
         
+        
+        self.simTimer = QtCore.QTimer(self)
+        self.simTimer.setSingleShot(True)
+        self.simTimerIterval = 100
+        self.simTimerRunCount = 10
+        self.simTimerRunner = 0
+        self.hasSimTimer = False
+        
         self.Shader = None # Shader Import File
+        self.shaderSettings = {}
         self.hasFrameBuffer = False
         self.fboLocation = None
         
@@ -520,6 +529,8 @@ class TextureGLWidget(QtOpenGL.QGLWidget):
         
         gl.glViewport(0, 0, self.imgWidth, self.imgHeight) # Out res is [512,512] setting by default
         
+        
+        
         print("GL Init")
         self.findPrefixNumber()
         
@@ -527,6 +538,24 @@ class TextureGLWidget(QtOpenGL.QGLWidget):
         if len(self.imageTexture) > 0:
             self.setTexelSize( [self.imageTexture[0]['width'], self.imageTexture[0]['height']] )
         
+        
+        
+        if hasattr( self.Shader, "settings"):
+            print("Settings Exist; ", self.glEffect )
+            self.shaderSettings = self.Shader.settings.copy()
+            print(self.shaderSettings)
+        
+        if "hasSim" in self.shaderSettings:
+            print("Found 'hasSim'")
+            self.hasSimTimer = self.shaderSettings['hasSim']
+            self.simTimer.timeout.connect(self.simTimeout)
+        if "timerIterval" in self.shaderSettings:
+            print("Found 'timerIterval'")
+            self.simTimerIterval = self.shaderSettings['timerIterval']
+        if "runSimCount" in self.shaderSettings:
+            print("Found 'runSimCount'")
+            self.simTimerRunCount = self.shaderSettings['runSimCount']
+            
         self.parent().createControls( self.glControls )
         
     def paintGL(self):
@@ -587,6 +616,17 @@ class TextureGLWidget(QtOpenGL.QGLWidget):
     def paintOverlayGL(self):
         print( "Paint Overlay GL " )
         
+    @QtCore.pyqtSlot()
+    def simTimeout(self):
+        if self.hasSimTimer :
+            self.simTimerRunner += 1
+            if self.simTimerRunner <= self.simTimerRunCount :
+                print(" Shader '",self.glEffect,"' run sim ",str(self.simTimerRunner))
+                self.simTimer.start( self.simTimerIterval )
+            else:
+                print(" Shader '",self.glEffect,"' finished sim run")
+                self.simTimerRunner = 0
+        return;
         
     # For Saving -
     # http://bazaar.launchpad.net/~mcfletch/openglcontext/trunk/view/head:/tests/saveimage.py
@@ -640,6 +680,7 @@ class TextureGLWidget(QtOpenGL.QGLWidget):
                     return;
                 tx = 1.0 / float( imgRes[0] )
                 ty = 1.0 / float( imgRes[1] )
+                print( "Set 'texelSize' - [",tx,",",ty,"]" )
                 self.setUniformValue( self.builtinUniforms['texelSize'], [tx,ty] )
             else:
                 print("Incorrect Image Resolution sent to 'setTexelSize'")
@@ -796,11 +837,16 @@ class ViewportWidget(QWidget):
         
         # -- -- --
         
+        self.glButtonLayout = QHBoxLayout()
+        self.glButtonLayout.setContentsMargins(0,0,0,0)
+        self.glButtonLayout.setSpacing(2)
+        self.mainLayout.addLayout(self.glButtonLayout)
+        
         saveRenderButton = QPushButton('Save Image', self)
         saveRenderButton.setToolTip('Save current ViewportGL to Image File')
         saveRenderButton.setFixedHeight(30)
         saveRenderButton.clicked.connect(self.saveRenderButton_onClick)
-        self.mainLayout.addWidget(saveRenderButton)
+        self.glButtonLayout.addWidget(saveRenderButton)
 
         # -- -- --
         
@@ -813,8 +859,16 @@ class ViewportWidget(QWidget):
         if self.textureGLWidget:
             self.textureGLWidget.imageScale(x,y,setScale)
     def createControls( self, controls ):
+    
+        if self.textureGLWidget.hasSimTimer :
+            runSimButton = QPushButton('Run Sim', self)
+            runSimButton.setToolTip('Run sim a set number of times')
+            runSimButton.setFixedHeight(30)
+            runSimButton.clicked.connect(self.textureGLWidget.simTimeout)
+            self.glButtonLayout.addWidget(runSimButton)
+    
         for uniform in controls:
-            print(uniform)
+            #print(uniform)
             uData = controls[uniform]
             controlLayout = QHBoxLayout()
             controlLayout.setContentsMargins(0,0,0,10)

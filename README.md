@@ -24,9 +24,12 @@ Once setting a source folder and regressively sourcing all folders & images with
 <br>You'll have all found images accessible within the `Project` window
 
 The available AI's you may run on any & all found images -
- - `Resnet` face finding, with face alignment, from `GFPGAN`
+ - `Facexlib` & `Resnet-50` for face finding in provided image paths, adapted from `GFPGAN`
+   - Found faces are both aligned & left unaligned then saved to disk
+   - With found face's bounding boxes in the image provided back
  - `Clip Interrogator` for `BLIP`'s Image2Prompt
-   - Easy editing and saving of image & prompt `.jpg`/`.png` + `.txt` pairs.
+   - Provide an image path & return the image's 'prompt'
+   - For easy editing and saving of image & prompt `.jpg`/`.png` + `.txt` pairs.
    - *( For `AUTOMATIC1111`'s Textural Inversion and/or HyperNet training )*
  - `ControlNet`'s `Depth`, `Normal`, and `OpenPose` generation;
    - The `canny`, `mlsd`, & `hed` AI outputs fail to meet my level of acceptable edge finding.

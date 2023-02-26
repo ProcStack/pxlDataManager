@@ -82,6 +82,13 @@ segmentSeedDictList.append( newSeedDict(5, 0.0, [.25,.5]) )
 # -- -- --
 # -- -- --
 
+
+settings = {
+    "hasSim" : True,
+    "timerIterval" : 100,
+    "runSimCount" : 10
+}
+
 uniforms = {
     "samplerTex" : {"type":"texture"},
     "bufferRefTex" : {"type":"fbo"},
@@ -208,22 +215,11 @@ fragment = '''
     // TODO : Any reason not to use `#version 420` ???
     //          Find limited hardware for later GL versions
     ''' + clamp01 + '''
-
-    vec4 reagionReachSample( sampler2D tx, vec2 uv, vec2 texelRes ){
-      vec4 sampleCd = texture2D(tx, uv);
-      
-      vec2 curUV;
-      vec2 curId;
-      float curUVDist=0.0;
-      vec4 curCd;
-      vec3 curMix;
-      float delta=0.0;
-      for( int x=0; x<boxSamplesCount; ++x){
-        curUV =  uv + boxSamples[x]*texelRes ;
-            
-        curCd = texture2D(tx, curUV);
-        sampleCd = mix( sampleCd, curCd, .5);
-      }
+    
+    // No cross preferencing or sample checking yet
+    //   Currently, if data has data, pull data
+    vec4 reagionReachSample( sampler2D colorTx, sampler2D dataTx, vec2 uv ){
+      vec4 sampleCd = texture2D(dataTx, uv);
       return sampleCd;
     }
 
@@ -244,27 +240,21 @@ fragment = '''
             int SEED_COLOR = 1;
             int SEED_POSITION = 2;
             
-            float disToSeed = 0.0;
-            vec3 minDistSeedColor = vec3(0.0);
+            //float disToSeed = 0.0;
+            //float curDisToSeed = 0.0;
+            
             int x=0;
-            int c=0;
-            float curDisToSeed = 0.0;
-            vec2 reachMult = texelSize * vec2( 1.0, 1.0 );
-            vec4 regionSample;
-            
-            // Prior frame allowed current frame influence
-            float inWeight = 1.0-dataCd.a;
-            
+            float curSeedWeight;
+            float foundSeed = dataCd.a;
+            vec3 minDistSeedColor = mix( vec3(0.0), dataCd.rgb, foundSeed );
             for( x=0; x<SEGMENT_SEED_COUNT; x=x+'''+segSeedRun+'''){
                 vec2 curRegionWeight = segmentSeeds[ x + REGION_WEIGHT ].xy;
                 vec2 curSeedPos = segmentSeeds[ x + SEED_POSITION ].xy;
                 vec3 curSeedColor = segmentSeeds[ x + SEED_COLOR ];
                 
-                // Neighbor Sampler
-                //for( c=0; c<boxSamplesCount; ++c){
-                //    vec2 reachPos = vUv + boxSamples[c] * reachMult;
-                //    regionSample = reagionReachSample( bufferRefTex, vUv, reachMult);
-                //}
+                curSeedWeight = step( length(curSeedPos-vUv), length(texelSize) );
+                minDistSeedColor = mix( minDistSeedColor, curSeedColor, step(foundSeed, curSeedWeight) );
+                foundSeed = max( foundSeed, curSeedWeight );
                 
                 // curDisToSeed = max(curDisToSeed, max(0.0, 1.0-length( vUv - curSeedPos )/seedDist));
                 // float colorStep = step( curDisToSeed, disToSeed );
@@ -273,16 +263,43 @@ fragment = '''
                 // disToSeed = min( disToSeed, curDisToSeed) ;
             }
             
+            // -- -- --
+            
+            // Prior frame allowed current frame influence
+            float inWeight = 1.0-foundSeed;
+            
+            // minDistSeedColor
+            // foundSeed
+            
+            // Neighbor Sampler
+            // TODO : Is there an unroller for PyOpenGL ??
+            //          Thats core OpenGL, no?
+            //            Gotta go searching
+            //              Or just Python it
+            
+            vec2 reachMult = texelSize * vec2( 1.0, 1.0 );
+            float reachWeight;
+            vec2 reachPos;
+            vec4 regionSample;
+            int c=0;
+            for( c=0; c<boxSamplesCount; ++c){
+                reachPos = vUv + boxSamples[c] * reachMult;
+                regionSample = reagionReachSample( samplerTex, bufferRefTex, reachPos );
+                reachWeight = regionSample.a*inWeight;
+                minDistSeedColor = mix( minDistSeedColor, regionSample.rgb, step( foundSeed, reachWeight ) );
+                foundSeed = max( foundSeed, reachWeight );
+            }
+            
             //curDisToSeed = max( curDisToSeed, max( 0.0, 1.0-length( vUv-mousePos )/seedDist )); 
             //disToSeed = max( disToSeed, curDisToSeed );
-            disToSeed = step(0.0, length(minDistSeedColor) );
-            disToSeed = clamp01( disToSeed );
+            //disToSeed = step(0.0, length(minDistSeedColor) );
+            //disToSeed = clamp01( disToSeed );
             
-            dataCd*=.9;
-            vec4 nearSeedColor = max( vec4(minDistSeedColor,disToSeed), dataCd);
+            //dataCd*=.9;
+            //vec4 nearSeedColor = max( vec4(minDistSeedColor,foundSeed), dataCd);
             //outCd.rgb = min( vec4(1.0), outCd+nearSeedColor );
             
-            outCd = vec4(minDistSeedColor,disToSeed);
+            outCd = vec4(minDistSeedColor,foundSeed);
             
         }else{ // Combine Data & Color Pass
         
