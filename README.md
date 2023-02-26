@@ -1,25 +1,25 @@
 # pxlDataManager v0.0.2
 ## PyQt5 Image Organization, GL Effects, & AI Prep Toolkit
 
-This repo contains a set of different stand-alone tools to organize, label, and apply image tweeks in aid of training material preperation and the training process for AI Models, Textural Inversion, and Hyper Networks.
+This repo contains a set of different integrated *(with stand-alone support)* tools to organize, label, and apply image tweeks/filters.
+<br>&nbsp;&nbsp;In attempt to aid handling training material, preperation, and the training process for AI Models, Textural Inversion, and Hyper Networks.
 
-Along with general aid for image viewing, modifications, and other tools I've needed in my day to day in texturing pipelines.
+Along with general image viewing, modification, & other file tools I've needed in my day to day in computer graphics texturing pipelines.
 <br/>
 <br/>
+<hr/>
 
-## Notes of Warning
-### As of Feb. 26th, 2023 -
-These tools were built on Python 3.10.6, PyQt5 5.15.9, Torch 1.13.1+cu117
-<br>&nbsp;&nbsp;**Do NOT `pip install XX_requirements.txt`** as I'm still figuring out the workflow for required repositories and python modules.
-<br>&nbsp;&nbsp;&nbsp;&nbsp;In the mean time, only install packages under `// Found needed --` in `XX_requirements.txt`
-
-These scripts were written on Windows, with SOME potential OS issues mitigated, some...
-<br>&nbsp;&nbsp;Which is better for cross platform usage, as there is no `glutInit()` on Windows
-<br>&nbsp;&nbsp;&nbsp;&nbsp;*Testing will be needed on Linux / MacOS.  I don't have a Linux machine strong enough to test these tools.*
+## Index --
+&nbsp;&nbsp;&nbsp;&nbsp; **¤** &nbsp;&nbsp;[What AIs can be ran in pxlDataManager?](#what-ais-can-be-ran-in-pxldatamanager)
+<br/>&nbsp;&nbsp;&nbsp;&nbsp; **¤** &nbsp;&nbsp;[What's in pxlDataManager?](#whats-in-pxldatamanager)
+<br/>&nbsp;&nbsp;&nbsp;&nbsp; **¤** &nbsp;&nbsp;[Future ControlNet Features](#future-controlnet-features)
+<br/>&nbsp;&nbsp;&nbsp;&nbsp; **¤** &nbsp;&nbsp;[Notes from the Developer](#notes-from-the-developer)
+<br/>&nbsp;&nbsp;&nbsp;&nbsp; **¤** &nbsp;&nbsp;[Notes of Warning ](#notes-of-warning)
 <br/>
+<hr/>
 <br/>
 
-## What AI access is there within pxlDataManager?
+## What AIs Can Be Ran In pxlDataManager?
 Once setting a source folder and regressively sourcing all folders & images within the source folder,
 <br>You'll have all found images accessible within the `Project` window
 
@@ -67,7 +67,7 @@ For now, custom implementations are not being added to `pxlDataManager` as its o
 <br/>
 <br/>
 
-### Future ControlNet Altered Features
+## Future ControlNet Features
 I have plans for `Frame-to-Frame Pixel Velocity` & `Pixel Rest Position` to be added into `ControlNet` injection locations.
 <br>&nbsp;&nbsp;Being that, Gif & Video will have accurate frame-to-frame tweening within AI generation.
 <br>&nbsp;&nbsp;Smooth & accurate AI generation, regardless of input prompt.
@@ -91,7 +91,7 @@ Outside of direct influence, I'll be adding a 3d `OpenPose` posing interface.
 <br/>
 <br/>
 
-## Note from the developer
+## Notes from the developer
 *(Nod to the current landscape)*
 <br>This repo was created with the intention to help train personal AI models in low vram environments; with the use of Microsoft's `DeepSpeed`
 <br>&nbsp;&nbsp;All this outside the reliance of internet scrapped images currently used in AI models.
@@ -122,4 +122,21 @@ All ControlNet scripts being added currently are designed to be a pre-process sy
 <br>&nbsp;&nbsp;I'll add any branches or requirements for any A1111 webui extension to this repo itself.
 <br>&nbsp;&nbsp;Mostly for retaining the breadcrumb trail of required repos for functionality of those extention scripts.
 <br>&nbsp;&nbsp;&nbsp;&nbsp;*(To be added soon)*
+
+
+## Notes of Warning
+***As of Feb. 26th, 2023 -***
+<br>These tools were built on Python 3.10.6, PyQt5 5.15.9, Torch 1.13.1+cu117
+<br>&nbsp;&nbsp;**Do NOT `pip install XX_requirements.txt`** as I'm still figuring out the workflow for required repositories and python modules.
+<br>&nbsp;&nbsp;&nbsp;&nbsp;In the mean time, only install packages under `// Found needed --` in `XX_requirements.txt`
+
+Required AI Models should automatically download into `./models/AI_NAME` & `./weights/AI_NAME`
+<br>&nbsp;&nbsp;Please see [./weights/Readme.md](weights/Readme.md) for required harddrive space of AI Model `.pth` files.
+
+These python scripts were written on Windows, with SOME potential OS issues mitigated, some...
+<br>&nbsp;&nbsp;Which may be better for cross platform usage anyway, as there is no `glutInit()` on Windows PyOpenGL
+<br>&nbsp;&nbsp;&nbsp;&nbsp;*Testing will be needed on Linux / MacOS.  But I don't have a Linux machine strong enough to test these tools.*
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*Pull Requests are welcomed!*
+<br/>
+<br/>
 
