@@ -1,4 +1,30 @@
 
+# Viewport GL - PyQt5 QOpenGL
+# -- -- --
+# This was the second version of ViewportGL
+#   Exclusively using QOpenGL for GL functions
+#
+# Issues
+# -- -- --
+# In this version I implemented a Shared Context
+#   Yet, never got it working as intended
+#     As 'QOpenGLWidget' doesn't have the same functionality a 'QOpenGLWindow'
+#   This lead to issues in active context switching
+#     Requiring Off Screen Surfaces for Context building
+#
+# I'm sure there are ways around this, however ...
+#   FBO & VBO limitations in Shared Context and PyQt5 GL Binding
+#     Lead me to make a hybrid of ViewportGL's PyQt5 & PyOpenGL versions
+#
+# Since my ignorance of OpenGL prob lead me to these issues
+#   But hey, gotta learn this stuff somehow, no?
+#
+# Keep learning, my friends!
+
+# -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- --
+
 # Built on Python 3.10.6 && PyQt5 5.15.9
 
 import sys, os

@@ -219,12 +219,13 @@ fragment = '''
     // No cross preferencing or sample checking yet
     //   Currently, if data has data, pull data
     vec4 reagionReachSample( sampler2D colorTx, sampler2D dataTx, vec2 uv ){
-      vec4 sampleCd = texture2D(dataTx, uv);
+      //vec4 sampleCd = texture(dataTx, uv);
+      vec4 sampleCd = texture(colorTx, uv);
       return sampleCd;
     }
 
     void main() {
-        vec2 scaledUv = vUv * (texScale*0.0+vec2(1.0,1.0)) + texOffset*0.0 + texelSize*.00;
+        vec2 scaledUv = vUv * texScale + texOffset;
         vec4 outCd = texture( samplerTex, scaledUv );
         vec4 dataCd = texture( bufferRefTex, scaledUv );
         
@@ -268,9 +269,6 @@ fragment = '''
             // Prior frame allowed current frame influence
             float inWeight = 1.0-foundSeed;
             
-            // minDistSeedColor
-            // foundSeed
-            
             // Neighbor Sampler
             // TODO : Is there an unroller for PyOpenGL ??
             //          Thats core OpenGL, no?
@@ -285,7 +283,7 @@ fragment = '''
             for( c=0; c<boxSamplesCount; ++c){
                 reachPos = vUv + boxSamples[c] * reachMult;
                 regionSample = reagionReachSample( samplerTex, bufferRefTex, reachPos );
-                reachWeight = regionSample.a*inWeight;
+                reachWeight = regionSample.a;//*inWeight;
                 minDistSeedColor = mix( minDistSeedColor, regionSample.rgb, step( foundSeed, reachWeight ) );
                 foundSeed = max( foundSeed, reachWeight );
             }
@@ -301,12 +299,13 @@ fragment = '''
             
             outCd = vec4(minDistSeedColor,foundSeed);
             
+            
         }else{ // Combine Data & Color Pass
         
             //outCd = outCd*(1.0-disToSeed);
             
             //outCd = mix( outCd, nearSeedColor, isFBO);
-            float blender = dataCd.a;
+            float blender = 1.0;//dataCd.a;
             dataCd.a = 1.0;
             outCd = mix( outCd, dataCd, blender) ;
             

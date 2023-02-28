@@ -3,15 +3,9 @@
 
 import sys, os, platform, time
 from PIL import Image
-from functools import partial
+#from functools import partial
 import math
 import json
-
-import ctypes
-import numpy as np
-import OpenGL.GL as gl
-import OpenGL.GLUT as glut
-import OpenGL.GLU as glu
 
 from PyQt5 import QtCore
 from PyQt5 import QtGui
@@ -22,22 +16,11 @@ from PyQt5.uic import *
 #from basicsr.utils import imwrite
 
 import utils.UserSettingsManager as pxlSettings
-import utils.ViewportGL as ViewerGL
-import utils.ViewportBufferGL as ViewerBufferGL
+import utils.ViewportGL as pxlViewerGL
 
 # -- -- --
 
-# Current known issues -
-# _Resizing Lower Shelf is janky as all the funking trumpet players...
-# _ViewportGL's seem to be sharing uniform values, bleh...
-#
-# TODOs -
-# _Implement the Settings Manager, easy, but needs to be done
-# _Auto Load Crops isn't implemented
-# _Get ViewportGL loading with more options and sliders and better Fragment Shader
-# _Make AI's Async; FaceFinder & ImageToPrompt
-# _Implement OpenPose finder for ControlNet prep
-
+# See 'TODOs.md' for current scripts states
 
 
 # -- -- --
@@ -63,8 +46,8 @@ ImageLabelerProjectData = {}
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 
-# Folders expected to be in root of script
-# TODO : Allow for input output folder paths
+# Project Outputs are in './Projects'
+#   Might be nice having Custom Output paths
 class ImageLabelerProjectManager(QMainWindow):
     def __init__(self, screenRes=[600,450], settingsManager=None, *args):
         super(ImageLabelerProjectManager, self).__init__(*args)
@@ -1592,29 +1575,38 @@ class ImageLabelerProject(QWidget):
         
         glSaveRenderPath = os.path.join( ImageLabelerScriptDir, "ViewportGLSaves" )
         
-        self.glSmartBlur = ViewerGL.ViewportWidget(self,0,"smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
+        self.glSmartBlur = pxlViewerGL.ViewportWidget(self,0,"smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
         #self.glSmartBlur.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glSmartBlur)
         self.glSmartBlur.imageOffset(pixres[0], pixres[1])
         # -- -- --
-        self.glEdgeFinding = ViewerGL.ViewportWidget(self,1,"edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", saveImagePath=glSaveRenderPath )
+        """
+        self.glEdgeFinding = pxlViewerGL.ViewportWidget(self,1,"edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", saveImagePath=glSaveRenderPath )
         #self.glEdgeFinding.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glEdgeFinding)
         self.glEdgeFinding.imageOffset(pixres[0], pixres[1])
         # -- -- --
-        self.glSegmentation = ViewerGL.ViewportWidget(self,2,"segment", "assets/glSegmentation_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
-        #self.glSegmentation = ViewerBufferGL.ViewportBufferWidget(self,2,"segment", "assets/glSegmentation_tmp1_alpha.png" )
+        self.glSegmentation = pxlViewerGL.ViewportWidget(self,2,"segment", "assets/glSegmentation_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
         #self.glSegmentation.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glSegmentation)
         self.glSegmentation.imageOffset(pixres[0], pixres[1])
         # -- -- --
-        self.glTexture = ViewerGL.ViewportWidget(self,3,"default", saveImagePath=glSaveRenderPath )
+        self.glTexture = pxlViewerGL.ViewportWidget(self,3,"default", saveImagePath=glSaveRenderPath )
         #self.glTexture.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glTexture)
         self.glTexture.imageOffset(pixres[0], pixres[1])
-        
-        
+        """
+        #self.glSegmentation.passTargetGL( self.glTexture.textureGLWidget )
         # -- -- --
+        
+        # self.glSmartBlur.connect( self.glEdgeFinding.createContext )
+        # self.glSmartBlur.connect( self.glSegmentation.createContext )
+        # self.glSmartBlur.connect( self.glTexture.createContext )
+        
+        #self.glSmartBlur.initializeContext()
+        #self.glEdgeFinding.initializeContext()
+        #self.glSegmentation.initializeContext()
+        #self.glTexture.initializeContext()
         
         
         # -- -- -- -- -- -- -- -- -- -- --
@@ -1677,9 +1669,11 @@ class ImageLabelerProject(QWidget):
     
     def resize(self):
         self.fitRawPixmapToView(True)
-        self.glTexture.update()
+        if hasattr( self, 'glTexture' ) :
+            self.glTexture.update()
         
-        
+    def test(self):
+        print("Test hit")
         
     # -- -- -- -- -- -- -- -- -- -- -- --
     # -- UI Event Listener Functions - -- --

@@ -50,9 +50,8 @@ fragment = '''
     out vec4 outColor;
 
     void main() {
-        vec2 scaledUv = vUv * texScale + texOffset;
+        vec2 scaledUv = vUv;// * texScale + texOffset;
         vec4 outCd = texture( samplerTex, scaledUv );
-        
         outColor = outCd;
     }
 
