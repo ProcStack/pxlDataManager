@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import *
 from PyQt5.uic import *
 
 
-# 'os' doesn't always handle extentions or other path specific needs correctly
+# 'os' doesn't always handle extensions or other path specific needs correctly
 #   Reference delimiter where needed
 delimiter = "/"
 if platform.system() == 'Windows':

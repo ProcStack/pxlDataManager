@@ -11,7 +11,21 @@ Major Issues & TODOs; smaller things are commented with `TODO` in their respecti
 
 ## TODOs 
 ### pxlDataManager -
-<br>&nbsp;&nbsp;_Auto Load Face & Classified Crops isn't implemented
+<br>&nbsp;&nbsp;_Auto Load Face & Classified Crops when image loaded
+<br>&nbsp;&nbsp;_Full screen window support ( Function to handle auto-switching )
+<br>&nbsp;&nbsp;_Dynamic layout building / reorganization
+<br>&nbsp;&nbsp;_Tearable / Moveable Layouts
+<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;As scripts support being stand-alone windows
+<br>&nbsp;&nbsp;_Check scripts still work as stand-alone ...
+#### User Settings Saving & Loading
+<br>&nbsp;&nbsp;_Auto-Select Previous Loaded Project
+<br>&nbsp;&nbsp;_Recent Projects list in MenuBar->File menu
+<br>&nbsp;&nbsp;_Store & Auto-Load prior 'Current Image'
+<br>&nbsp;&nbsp;_Prior window size, position, & full screen state at exit
+<br>&nbsp;&nbsp;_Prior layout sizes *(only for resizable layouts)*
+<br>&nbsp;&nbsp;_Prior layout of tearable frames
+<br>&nbsp;&nbsp;_Prior windowed frames
+<br>&nbsp;&nbsp;_Prior position & size of windowed frames
 
 ### Suplimental AIs -
 <br>&nbsp;&nbsp;_Make AI's Async; FaceFinder & ImageToPrompt

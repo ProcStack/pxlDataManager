@@ -3,7 +3,7 @@
 
 import sys, os, platform, time
 from PIL import Image
-#from functools import partial
+from functools import partial
 import math
 import json
 
@@ -20,12 +20,13 @@ import utils.ViewportGL as pxlViewerGL
 
 # -- -- --
 
+
 # See 'TODOs.md' for current scripts states
 
 
 # -- -- --
 
-# 'os' doesn't always handle extentions or other path specific needs correctly
+# 'os' doesn't always handle extensions or other path specific needs correctly
 #   Reference delimiter where needed
 delimiter = "/"
 if platform.system() == 'Windows':
@@ -33,9 +34,7 @@ if platform.system() == 'Windows':
 
 # -- -- --
 
-# Orig name (for code clean up) - scriptAbsDir
 ImageLabelerAbsPath = os.path.abspath(__file__)
-# Orig name (for code clean up) - scriptDir
 ImageLabelerScriptDir = os.path.dirname(ImageLabelerAbsPath)
 
 ImageLabelerActiveProject = "No Project Loaded"
@@ -52,9 +51,25 @@ class ImageLabelerProjectManager(QMainWindow):
     def __init__(self, screenRes=[600,450], settingsManager=None, *args):
         super(ImageLabelerProjectManager, self).__init__(*args)
         
+        
         self.settings = settingsManager
+        self.setStyle(QStyleFactory.create('Fusion'))
+        
+        # TODO : Read CSS assets folder
+        self.styleFiles = {}
+        self.styleFiles['Light'] = "assets/StyleSheets/Light.css"
+        self.styleFiles['Dark'] = "assets/StyleSheets/Dark.css"
+        self.styleSheets = {}
+        self.activeStyle = self.settings.read( "AppActiveStyle", "Light" )
+        self.activeStyleMenuItem = None
+        
+        # TODO : Setup Framlessness for Title Bar style
+        # self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
         
         self.menuBar = None
+        self.statusBar = None
+        # Look into QtWidgets.QToolBar
+        
         self.mouseLocked = False
         self.mouseMoved = False
 
@@ -62,18 +77,26 @@ class ImageLabelerProjectManager(QMainWindow):
         self.screenCenter = [int(screenRes[0]*.5), int(screenRes[1]*.5)]
         
         self.managerInitSize = [ 600, 450 ]
+        self.managerInitSize = self.settings.read( "managerInitSize", self.managerInitSize )
         
-        self.managerInitPos = [ 200, 200 ]
-        self.managerInitPos[0] = int( self.screenCenter[0] - self.managerInitSize[0]*.5 )
-        self.managerInitPos[1] = int( self.screenCenter[1] - self.managerInitSize[1]*.5 )
+        self.managerInitPos = [
+            int( self.screenCenter[0] - self.managerInitSize[0]*.5 ),
+            int( self.screenCenter[1] - self.managerInitSize[1]*.5 )
+        ]
+        self.managerInitPos = self.settings.read( "managerInitPos", self.managerInitPos )
         
-        self.projectLoadMinSize = [ int(self.screenRes[0]*.75), int(self.screenRes[1]*.75) ]
+        defaultProjectLoadSize = [ int(self.screenRes[0]*.75), int(self.screenRes[1]*.75) ]
+        self.projectLoadMinSize = self.settings.read( "projectLoadMinSize", defaultProjectLoadSize )
+        self.projectLoadFullScreen = self.settings.read( "projectLoadFullScreen", False )
 
         #self.projectLoadMinWidth = [min( screenRes[0], 1000 ),min( screenRes[1], 700 )]
         
         
         self.sourceDir = ""
         self.outputDir = ""
+        
+        
+        self.previousProjectName = self.settings.read( "previousProjectName", "" )
         
         self.projectRootDirName = "Projects"
         self.projectName = "Default"
@@ -95,7 +118,8 @@ class ImageLabelerProjectManager(QMainWindow):
         # Should found folders be Empty
         #   Or only have folders in them
         #     Dont list these directories in Project's Folder List
-        self.bypassEmptyAndFoldersOnly = True
+        # TODO : Add checkbox in Manager window for this option
+        self.bypassEmptyAndFoldersOnly = self.settings.read( "bypassEmptyAndFoldersOnly", True )
         
         self.curProjectData = {
             'name':"",
@@ -124,15 +148,22 @@ class ImageLabelerProjectManager(QMainWindow):
         self.statusTimer = None
         self.statusTimeout = 4000
         
-        self.menuBar = None
-        self.statusBar = None
- 
+        # TODO : Needs implementation in for-loops and AI processes
+        self.exiting = False
+        
+        
+        self.settings.save()
+
+        
+    # TODO : Check if OpenGL textures, FBOs, VBOs, and programs need unbinding & deletion prior to exit 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Enter:
             print("Project Manager; Enter Key")
             self.proceed()
         elif event.key() == QtCore.Qt.Key_Escape:
             print( "Exiting" )
+            self.exiting = True
+            self.settings.save()
             QApplication.quit()
         event.accept()
         
@@ -152,18 +183,26 @@ class ImageLabelerProjectManager(QMainWindow):
         fileMenu.addAction( self.newProjectAction )
         #self.newProjectAction.triggered.connect( self.menu_file_newProject )
         # -- -- --
+        fileMenu.addSeparator()
+        # -- -- --
         self.openProjectAction = QAction("Open Project", self)
         fileMenu.addAction(self.openProjectAction)
         #self.openProjectAction.triggered.connect( self.menu_file_newProject )
+        # -- -- --
+        self.saveProjectFolderAction = QAction("Save Project", self)
+        fileMenu.addAction(self.saveProjectFolderAction)
+        self.saveProjectFolderAction.triggered.connect( self.menu_file_saveProject )
+        # -- -- --
+        fileMenu.addSeparator()
+        # -- -- --
+        # TODO : Add Recent Projects List
         # -- -- --
         self.openProjectFolderAction = QAction("Open Project Folder in Explorer", self)
         fileMenu.addAction(self.openProjectFolderAction)
         self.openProjectFolderAction.triggered.connect( self.menu_file_openFolderInExplorer )
         # -- -- --
         # -- -- --
-        self.saveProjectFolderAction = QAction("Save Project", self)
-        fileMenu.addAction(self.saveProjectFolderAction)
-        self.saveProjectFolderAction.triggered.connect( self.menu_file_saveProject )
+        fileMenu.addSeparator()
         # -- -- --
         self.exitAction = QAction("Exit", self)
         fileMenu.addAction(self.exitAction)
@@ -221,7 +260,31 @@ class ImageLabelerProjectManager(QMainWindow):
         optionsMenu.addAction( self.infoAction )
         #self.infoAction.triggered.connect( self.menu_options_confirmDelete )
         # -- -- --
+        setStylesMenu = QMenu("Set Style Profile ...", self)
+        optionsMenu.addMenu( setStylesMenu )
         
+ 
+        # creating a action group
+        styleActionGroup = QActionGroup(self)
+        styleActionGroup.setExclusive( True )
+        
+        #def findStyleSheetFiles(self, path="assets/StyleSheets"):
+        #def createStyleSheetMenu(self):
+        for s in self.styleFiles:
+            styleEntryName = s
+            styleEntryPath = self.styleFiles[s]
+            
+            styleEntryAction = QAction( styleEntryName, self )
+            styleEntryAction.setCheckable(True)
+            styleEntryAction.triggered.connect(partial(self.loadStyleSheets,styleEntryName,styleEntryPath))
+            
+            
+            self.styleSheets[ s ]={}
+            self.styleSheets[ s ]['menuItem'] = styleEntryAction
+            
+            setStylesMenu.addAction( styleEntryAction )
+            styleActionGroup.addAction(styleEntryAction)
+
         
         # == == ==
         # == == ==
@@ -247,6 +310,7 @@ class ImageLabelerProjectManager(QMainWindow):
         self.browseToPath(self.projectPath)
     def menu_file_saveProject(self):
         self.saveProjectData()
+        self.settings.save()
         """
         self.projectName = curProjectName
         self.projectPath = self.existingProjects[curProjectName]['ProjectPath']
@@ -266,6 +330,15 @@ class ImageLabelerProjectManager(QMainWindow):
         self.browseToPath(self.projectWidget.outputCroppedPath)
     def menu_browse_classFolder(self):
         self.browseToPath(self.projectWidget.outputClassifiedPath)
+        
+    def findStyleSheetFiles(self, path="assets/StyleSheets"):
+        return;
+        
+    def createStyleSheetMenu(self):
+        if len(self.styleFiles) == 0:
+            self.findStyleSheetFiles()
+        #self.styleFiles
+        
         
     def createStatusBar(self, message=None):
         self.statusBar = QStatusBar()
@@ -306,13 +379,33 @@ class ImageLabelerProjectManager(QMainWindow):
             #if messageTimeout:
             #    self.statusTimer.start( self.statusTimeout )
         QApplication.processEvents()
-                
+    
+    # TODO : Add 'toStylePath' support
+    def loadStyleSheets( self, toStyleName, toStylePath = None ):
+        # Use `.setObjectName()` for css #id specific css
+        curStyle = ""
+        if toStyleName not in self.styleSheets or 'style' not in self.styleSheets[toStyleName] :
+            cssFile = self.styleFiles[toStyleName]
+            f = open(cssFile,"r")
+            curStyle = f.read()
+            #self.styleSheets[ toStyleName ] = curStyle
+            #self.styleSheets[ toStyleName ]['style'] = curStyle
+        else:
+            curStyle = self.styleSheets[ toStyleName ]
+            
+        self.setStyleSheet( curStyle ) 
+        
+        self.activeStyle = self.settings.set( "AppActiveStyle", toStyleName )
+        
+        #if self.projectWidget :
+        #    self.projectWidget.fileList.verticalScrollBar().setStyleSheet("QScrollBar{background:#000000;}")
+        self.showStatus( "Loaded '"+toStyleName+"' Style Profile" )
 
     def setupUI(self):
-        # setting up the geometry
-        pad = 15
- 
+            
         self.setWindowTitle("Image & AI Labeling Tools")
+        
+        self.loadStyleSheets( self.activeStyle )
         
         self.mainWidget = QWidget()
         self.mainLayout = QVBoxLayout()
@@ -375,33 +468,38 @@ class ImageLabelerProjectManager(QMainWindow):
         # -- -- --
         
         itemKeys = []
+        currentSelection = 0
         projectsRootDir = os.path.join(ImageLabelerScriptDir, self.projectRootDirName)
-        print(projectsRootDir)
+        #print(projectsRootDir)
         if not os.path.isdir( projectsRootDir ) :
             print(" No '",self.projectRootDirName,"' folder found, making -\n  ",projectsRootDir)
             os.mkdir( projectsRootDir )
         projectsRootDirList=os.listdir(projectsRootDir)
-        for x in projectsRootDirList:
-            curFullPath = os.path.join(projectsRootDir,x)
+        for x,curProjectDir in enumerate( projectsRootDirList ):
+            curFullPath = os.path.join( projectsRootDir, curProjectDir )
             if os.path.isdir(curFullPath):
                 projectDirFileList=os.listdir(curFullPath)
                 if self.fileDataJsonName in projectDirFileList:
-                    itemKeys.append(x)
-                    self.existingProjects[x]={}
+                    itemKeys.append( curProjectDir )
                     # -- -- --
-                    self.existingProjects[x]['ProjectPath'] = curFullPath
+                    if curProjectDir == self.previousProjectName :
+                        currentSelection = x
+                    # -- -- --
+                    self.existingProjects[curProjectDir]={}
+                    # -- -- --
+                    self.existingProjects[curProjectDir]['ProjectPath'] = curFullPath
                     # -- -- --
                     pdJsonPath = os.path.join(curFullPath,self.fileDataJsonName)
-                    self.existingProjects[x]['ProjectDataJsonPath'] = pdJsonPath
+                    self.existingProjects[curProjectDir]['ProjectDataJsonPath'] = pdJsonPath
                     # -- -- --
                     settingsJsonPath = os.path.join(curFullPath,self.settingsJsonName)
-                    settingsJsonPath = settingsJsonPath if os.path.isfile(settingsJsonPath) else None
-                    self.existingProjects[x]['SettingsJsonPath'] = settingsJsonPath
+                    settingsJsonPath = settingsJsonPath if os.path.isfile( settingsJsonPath ) else None
+                    self.existingProjects[curProjectDir]['SettingsJsonPath'] = settingsJsonPath
         # -- -- --
         if len(itemKeys) > 0:
             for project in itemKeys:
-                QListWidgetItem(project, self.foundProjectsList)
-            self.foundProjectsList.setCurrentRow(0)
+                QListWidgetItem( project, self.foundProjectsList )
+            self.foundProjectsList.setCurrentRow( currentSelection )
             self.foundProjectsList_onSelectionChanged()
         # -- -- --
         
@@ -603,7 +701,7 @@ class ImageLabelerProjectManager(QMainWindow):
         
     @QtCore.pyqtSlot()
     def loadScanDirButton_onClick(self):
-        print( "Load Project" )
+        #print( "Load Project" )
         selectedFolder = self.openFolderDialog()
         if selectedFolder :
             self.scanDirWidget.setText(selectedFolder)
@@ -611,7 +709,7 @@ class ImageLabelerProjectManager(QMainWindow):
         
     @QtCore.pyqtSlot()
     def scanDirButton_onClick(self):
-        print( "Scan Dir... " )
+        #print( "Scan Dir... " )
         sourceImgPath = self.scanDirWidget.text()
         if sourceImgPath and os.path.isdir(sourceImgPath):
             self.dirOrder = []
@@ -628,7 +726,7 @@ class ImageLabelerProjectManager(QMainWindow):
         
     @QtCore.pyqtSlot()
     def newProjectButton_onClick(self):
-        print( "New Project" )
+        #print( "New Project" )
         
         self.projectName = self.projectNameWidget.text()
         print( "Making the project '",self.projectName,"'" )
@@ -648,7 +746,7 @@ class ImageLabelerProjectManager(QMainWindow):
     def projectList_onItemDoubleClick(self):
         curItem = self.foundProjectsList.currentItem()
         curProjectName = curItem.text()
-        print( curProjectName )
+        #print( curProjectName )
         #curItem = self.foundProjectsList.currentItem()
         #self.rebuildFileList(curWidget.fullPath)
         self.setFocus()
@@ -697,14 +795,14 @@ class ImageLabelerProjectManager(QMainWindow):
         
     @QtCore.pyqtSlot()
     def verifyImagesButton_onClick(self):
-        print(" Verify Images Exist ")
+        #print(" Verify Images Exist ")
         #curItem = self.foundProjectsList.currentItem()
         #self.rebuildFileList(curWidget.fullPath)
         self.setFocus()
         
     @QtCore.pyqtSlot()
     def cullEmptyFoldersButton_onClick(self):
-        print(" Cull Empty Folders ")
+        #print(" Cull Empty Folders ")
         self.loadProjectData()
         
         #self.imageList=data['imageList']
@@ -756,7 +854,7 @@ class ImageLabelerProjectManager(QMainWindow):
 
 
     def loadProject(self):
-        print(self.fileDataJsonPath)
+        #print(self.fileDataJsonPath)
         self.loadProjectData()
         if len(self.dirOrder) > 0 :
             
@@ -781,8 +879,13 @@ class ImageLabelerProjectManager(QMainWindow):
             
             # -- -- --
             
-            self.projectWidget = ImageLabelerProject( parent=self, outputPath = self.projectPath )
+            self.projectWidget = ImageLabelerProject(
+                parent = self,
+                settingsManager = self.settings.newSubData('ImageLabelerProject'),
+                outputPath = self.projectPath
+            )
             
+
             #self.mainLayout.addWidget(self.projectWidget)
             self.curProjectBlockLayout.addWidget(self.projectWidget)
             #self.setCentralWidget(self.projectWidget)
@@ -826,6 +929,9 @@ class ImageLabelerProjectManager(QMainWindow):
                 # Ordered Director List
                 self.dirOrder=data['dirOrder']
             print("Loaded Json; Folder Count - ",len(self.dirOrder))
+            
+            self.settings.set( "previousProjectName", self.projectName )
+            
         else:
             print("Project Data File Not Found")
 
@@ -840,6 +946,8 @@ class ImageLabelerProjectManager(QMainWindow):
         f = open( self.fileDataJsonPath, "w")
         f.write(json.dumps(jsonOut, indent = 2))
         f.close()
+        
+        self.settings.save()
         
         print("Project Data Json Updated")
             
@@ -911,10 +1019,12 @@ class FolderListItem(QWidget):
         self.dispImagePath = ""
         
         self.infoTextBlockLayout = QVBoxLayout()
-        self.infoTextBlockLayout.setContentsMargins(5,0,0,0)
-        self.infoTextBlockLayout.setSpacing(2)
+        self.infoTextBlockLayout.setContentsMargins(5,3,0,3)
+        self.infoTextBlockLayout.setSpacing(5)
         self.folderNameLabel = QLabel()
+        self.folderNameLabel.setObjectName("folderNameLabel")
         self.fileNameLabel = QLabel()
+        self.fileNameLabel.setObjectName("fileNameLabel")
         self.infoTextBlockLayout.addWidget(self.folderNameLabel)
         self.infoTextBlockLayout.addWidget(self.fileNameLabel)
         
@@ -923,26 +1033,25 @@ class FolderListItem(QWidget):
         self.fileItemBlockLayout.setSpacing(1)
         self.dispImageLabel = QLabel()
         self.imageCountLabel = QLabel()
-        self.imageCountLabel.setAlignment(QtCore.Qt.AlignRight)
+        self.imageCountLabel.setObjectName("imageCountLabel")
+        self.imageCountLabel.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignHCenter)
+        self.imageCountLabel.setMaximumWidth(70)
         self.fileItemBlockLayout.addWidget(self.dispImageLabel, 0)
         self.fileItemBlockLayout.addLayout(self.infoTextBlockLayout, 1)
         self.fileItemBlockLayout.addWidget(self.imageCountLabel, 2)
         self.setLayout(self.fileItemBlockLayout)
-        # setStyleSheet
-        self.folderNameLabel.setStyleSheet('''
-            font-style: italic;
-            color: rgb(0, 0, 255);
-        ''')
-        self.fileNameLabel.setStyleSheet('''
-            font-size : 110%;
-            font-weight : bold;
-            color : rgb(200, 0, 120);
-        ''')
-        self.imageCountLabel.setStyleSheet('''
-            font-size : 110%;
-            font-weight : bold;
-            color : rgb(200, 0, 120);
-        ''')
+
+    def setCurrent(self, isCurrent=False):
+        currentText = "_Selected" if isCurrent else ""
+        self.folderNameLabel.setObjectName("folderNameLabel"+currentText)
+        self.folderNameLabel.style().unpolish(self.folderNameLabel)
+        self.folderNameLabel.style().polish(self.folderNameLabel)
+        self.fileNameLabel.setObjectName("fileNameLabel"+currentText)
+        self.fileNameLabel.style().unpolish(self.fileNameLabel)
+        self.fileNameLabel.style().polish(self.fileNameLabel)
+        self.imageCountLabel.setObjectName("imageCountLabel"+currentText)
+        self.imageCountLabel.style().unpolish(self.imageCountLabel)
+        self.imageCountLabel.style().polish(self.imageCountLabel)
 
     def setFullPath(self, text):
         self.fullPath = text
@@ -982,31 +1091,33 @@ class FileListItem(QWidget):
         self.data = {}
         
         self.infoTextBlockLayout = QVBoxLayout()
-        self.infoTextBlockLayout.setContentsMargins(5,0,0,0)
-        self.infoTextBlockLayout.setSpacing(2)
-        self.folderNameLabel    = QLabel()
-        self.fileNameLabel  = QLabel()
+        self.infoTextBlockLayout.setContentsMargins(5,3,0,3)
+        self.infoTextBlockLayout.setSpacing(5)
+        self.folderNameLabel = QLabel()
+        self.folderNameLabel.setObjectName("folderNameLabel")
+        self.fileNameLabel = QLabel()
+        self.fileNameLabel.setObjectName("fileNameLabel")
         self.infoTextBlockLayout.addWidget(self.folderNameLabel)
         self.infoTextBlockLayout.addWidget(self.fileNameLabel)
         
-        self.fileItemBlockLayout  = QHBoxLayout()
+        self.fileItemBlockLayout = QHBoxLayout()
         self.fileItemBlockLayout.setContentsMargins(0,0,0,10)
         self.fileItemBlockLayout.setSpacing(1)
-        self.dispImageLabel      = QLabel()
+        self.dispImageLabel = QLabel()
         self.fileItemBlockLayout.addWidget(self.dispImageLabel, 0)
         self.fileItemBlockLayout.addLayout(self.infoTextBlockLayout, 1)
         self.setLayout(self.fileItemBlockLayout)
         # setStyleSheet
-        self.folderNameLabel.setStyleSheet('''
-            font-style: italic;
-            color: rgb(0, 0, 255);
-        ''')
-        self.fileNameLabel.setStyleSheet('''
-            font-size : 110%;
-            font-weight : bold;
-            color : rgb(200, 0, 120);
-        ''')
 
+    def setCurrent(self, isCurrent=False):
+        currentText = "_Selected" if isCurrent else ""
+        self.folderNameLabel.setObjectName("folderNameLabel"+currentText)
+        self.folderNameLabel.style().unpolish(self.folderNameLabel)
+        self.folderNameLabel.style().polish(self.folderNameLabel)
+        self.fileNameLabel.setObjectName("fileNameLabel"+currentText)
+        self.fileNameLabel.style().unpolish(self.fileNameLabel)
+        self.fileNameLabel.style().polish(self.fileNameLabel)
+        
     def setFullPath( self, text ):
         self.fullPath = text
         
@@ -1029,11 +1140,12 @@ class FileListItem(QWidget):
         self.data = dataDict
         
 class ImageLabelerProject(QWidget):
-    def __init__( self, parent = None, outputPath = "Default" ):
+    def __init__( self, parent = None, settingsManager=None, outputPath = "Default" ):
         #super(ImageLabelerWindow, self).__init__(*args)
         super(ImageLabelerProject, self).__init__(parent)
         self.manager = parent
         
+        self.settings = settingsManager
         
         self.mouseLocked = False
         self.mousePos = None
@@ -1046,7 +1158,10 @@ class ImageLabelerProject(QWidget):
         self.ulShelfAdjustLocked = False
         
         # Minimum size of Lower Shelf
-        self.minLowShelfSize = 150
+        self.minLowShelfSize = self.settings.read( 'LowShelfSize', 150 )
+        
+        self.confirmFileDeletion = self.settings.read( 'ConfirmDeletions', True )
+        
         
         self.resizeTimer = QtCore.QTimer(self)
         self.resizeTimer.setSingleShot(True)
@@ -1057,6 +1172,7 @@ class ImageLabelerProject(QWidget):
         self.curFileObject = None
         self.curPromptField = None
         self.curFolderPath = None
+        self.curFolderObject = None
         self.curRawPixmap = None
         
         
@@ -1080,6 +1196,8 @@ class ImageLabelerProject(QWidget):
         self.projectDataJson = ""
         self.projectSettingsJson = ""
         self.setAcceptDrops(True)
+        
+        self.settings.save()
 
     # -- -- -- -- -- -- -- -- -- -- -- -- -- --
     # -- User Interaction Helper Functions - -- --
@@ -1088,7 +1206,7 @@ class ImageLabelerProject(QWidget):
     def keyPressEvent(self, event):
         #print(event)
         if event.key() == QtCore.Qt.Key_Delete :
-            ret = QMessageBox.question(self,'', "Delete current image from disk?", QMessageBox.Yes | QMessageBox.No)
+            ret = QMessageBox.question(self,'', "Remove current image from Project?", QMessageBox.Yes | QMessageBox.No)
             if ret == QMessageBox.Yes:
                 self.removeDeleteImageButton_onClick()
         if event.key() in [QtCore.Qt.Key_A,QtCore.Qt.Key_Up,QtCore.Qt.Key_Left]:
@@ -1158,28 +1276,7 @@ class ImageLabelerProject(QWidget):
     # -- -- -- -- -- -- -- --
             
     def setupUI(self):
-        # setting up the geometry
-        pad = 15
  
-        # image path
-        imgPath = "assets/foundFacesTemp.jpg"
- 
-        imgExt = imgPath.split(".")[-1]
- 
-        # loading image
-        imgData = open(imgPath, 'rb').read()
-        
-        pixmap = self.cropImage(
-            imgData = imgData,
-            imgType = imgExt,
-            size = 512
-        )
-        
-        pixres = [pixmap.width()*4, pixmap.height()*3]
-        pixoffset = [240, 180]
-    
-    
-
         #mainWidget = QWidget()
         mainLayout = QVBoxLayout()
         mainLayout.setContentsMargins(0,0,0,0)
@@ -1197,6 +1294,8 @@ class ImageLabelerProject(QWidget):
             |   3  | 4 | 5 |
             |______|___|___|
         """
+        
+        # Set up QDockWidgets
         
         # Upper Shelf, Block 1 & 2
         self.upperShelfWidget = QWidget()
@@ -1265,7 +1364,7 @@ class ImageLabelerProject(QWidget):
         self.currentFileBlockWidget.setLayout(currentFileBlockLayout)
         self.currentFileBlockWidget.setMinimumWidth( 512 )
         self.currentFileBlockWidget.setMinimumHeight( 512 )
-        self.currentFileBlockWidget.setSizePolicy( QSizePolicy.MinimumExpanding, QSizePolicy.MinimumExpanding )
+        self.currentFileBlockWidget.setSizePolicy( QSizePolicy.Expanding, QSizePolicy.MinimumExpanding )
         upperShelfLayout.addWidget(self.currentFileBlockWidget)
 
         # Block 3
@@ -1275,6 +1374,8 @@ class ImageLabelerProject(QWidget):
         currentDataBlockLayout.setContentsMargins(0,0,0,0)
         currentDataBlockLayout.setSpacing(1)
         currentDataBlock.setLayout(currentDataBlockLayout)
+        currentDataBlock.setMaximumWidth(512)
+        currentDataBlock.setMinimumWidth(200)
         upperShelfLayout.addWidget(currentDataBlock)
         
         # -- -- --
@@ -1338,6 +1439,7 @@ class ImageLabelerProject(QWidget):
             curFolderItemWidget = QListWidgetItem(self.folderList)
             curFolderItemWidget.setSizeHint(curFileItem.sizeHint())
             if self.curFolderListItem == None:
+                curFileItem.setCurrent(True)
                 self.curFolderListItem = curFolderItemWidget
 
             self.folderList.addItem(curFolderItemWidget)
@@ -1363,7 +1465,6 @@ class ImageLabelerProject(QWidget):
         self.curFolderPath = self.folderList.itemWidget(self.curFolderListItem).fullPath
         self.rebuildFileList(self.curFolderPath)
         
-    
         # -- -- -- -- -- -- -- -- -- -- --
         # -- -- -- -- -- -- -- -- -- -- --
         # -- -- -- -- -- -- -- -- -- -- --
@@ -1375,16 +1476,18 @@ class ImageLabelerProject(QWidget):
         # -- -- --
         rawImagePromptBarBlock = QWidget()
         rawImagePromptBarLayout = QHBoxLayout()
-        rawImagePromptBarLayout.setAlignment(QtCore.Qt.AlignCenter)
+        rawImagePromptBarLayout.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignHCenter)
         rawImagePromptBarLayout.setContentsMargins(1,1,1,1)
-        rawImagePromptBarLayout.setSpacing(2)
+        rawImagePromptBarLayout.setSpacing(20)
         rawImagePromptBarBlock.setLayout(rawImagePromptBarLayout)
+        rawImagePromptBarBlock.setMinimumWidth( 512 )
+        rawImagePromptBarBlock.setMaximumHeight( 50 )
+        rawImagePromptBarBlock.setSizePolicy( QSizePolicy.MinimumExpanding, QSizePolicy.Maximum )
         currentFileBlockLayout.addWidget(rawImagePromptBarBlock)
         # -- -- --
         rawImagePromptLabelWidget = QLabel(" Image Prompt - ")
-        rawImagePromptLabelWidget.setFont(QtGui.QFont("Tahoma",10,QtGui.QFont.Bold))
+        rawImagePromptLabelWidget.setFont(QtGui.QFont("Tahoma",9,QtGui.QFont.Bold))
         #rawImagePromptLabelWidget.setMinimumWidth( 100 )
-        #rawImagePromptLabelWidget.setMinimumHeight( 30 )
         #rawImagePromptLabelWidget.setSizePolicy( QSizePolicy.Minimum, QSizePolicy.Minimum )
         rawImagePromptBarLayout.addWidget(rawImagePromptLabelWidget)
         # -- -- --
@@ -1398,15 +1501,27 @@ class ImageLabelerProject(QWidget):
         self.curPromptField.editingFinished.connect(self.curPromptField_editingFinished)
         rawImagePromptBarLayout.addWidget( self.curPromptField )
         # -- -- --
+        line = QLabel('', self)
+        line.setMaximumWidth(200)
+        rawImagePromptBarLayout.addWidget(line)
+        # -- -- --
         self.generateImagePromptButton = QPushButton('Generate Image Prompt', self)
         self.generateImagePromptButton.setToolTip('Create Prompt from Image, BLIP Img2Txt')
+        self.generateImagePromptButton.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.generateImagePromptButton.setMinimumHeight(35)
         self.generateImagePromptButton.clicked.connect(self.generateImagePromptButton_onClick)
         rawImagePromptBarLayout.addWidget(self.generateImagePromptButton)
         # -- -- --
         self.findFaceButton = QPushButton('Find Faces in Photo', self)
         self.findFaceButton.setToolTip('Auto Find Faces in current image; Face Helper')
+        self.findFaceButton.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.findFaceButton.setMinimumHeight(35)
         self.findFaceButton.clicked.connect(self.findFaceButton_onClick)
         rawImagePromptBarLayout.addWidget(self.findFaceButton)
+        # -- -- --
+        line = QLabel('', self)
+        line.setMaximumWidth(200)
+        rawImagePromptBarLayout.addWidget(line)
         # -- -- --
         
         # -- -- --
@@ -1414,10 +1529,13 @@ class ImageLabelerProject(QWidget):
         # -- -- --
         self.rawImageBlockWidget = QWidget()
         rawImageBlockLayout = QHBoxLayout()
-        rawImageBlockLayout.setAlignment(QtCore.Qt.AlignCenter)
         rawImageBlockLayout.setContentsMargins(1,1,1,1)
         rawImageBlockLayout.setSpacing(2)
+        rawImageBlockLayout.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignHCenter)
         self.rawImageBlockWidget.setLayout(rawImageBlockLayout)
+        self.rawImageBlockWidget.setMinimumWidth( 512 )
+        self.rawImageBlockWidget.setMinimumHeight( 512 )
+        self.rawImageBlockWidget.setSizePolicy( QSizePolicy.Expanding, QSizePolicy.MinimumExpanding )
         #self.rawImageBlockWidget.setSizePolicy( QSizePolicy.Ignored, QSizePolicy.Ignored )
         currentFileBlockLayout.addWidget(self.rawImageBlockWidget)
         #self.rawImageBlockWidget.setMinimumHeight( 512 )
@@ -1425,7 +1543,7 @@ class ImageLabelerProject(QWidget):
         #self.rawImageBlockWidget.setSizePolicy( QSizePolicy.Ignored, QSizePolicy.Minimum )
         
         self.rawImageWidget = QLabel(self)
-        self.rawImageWidget.setPixmap(pixmap)
+        #self.rawImageWidget.setPixmap(pixmap)
         #self.rawImageWidget.resize( 512, 512 )
         self.rawImageWidget.setMinimumWidth( 10 )
         self.rawImageWidget.setMinimumHeight( 512 )
@@ -1437,21 +1555,27 @@ class ImageLabelerProject(QWidget):
         # -- -- --
 
         self.curImageButtonBlock = QWidget()
-        self.curImageButtonBlock.setFixedHeight(30)
+        self.curImageButtonBlock.setFixedHeight(50)
         curImageButtonLayout = QHBoxLayout()
-        curImageButtonLayout.setAlignment(QtCore.Qt.AlignCenter)
+        curImageButtonLayout.setAlignment(QtCore.Qt.AlignVCenter | QtCore.Qt.AlignHCenter)
         curImageButtonLayout.setContentsMargins(1,1,1,1)
-        curImageButtonLayout.setSpacing(2)
+        curImageButtonLayout.setSpacing(5)
         self.curImageButtonBlock.setLayout(curImageButtonLayout)
         currentFileBlockLayout.addWidget(self.curImageButtonBlock)
         
+        curImageButtonLayout.addStretch(1)
+        
         removeImageEntryButton = QPushButton('Remove Entry From Project', self)
         removeImageEntryButton.setToolTip('Removes image from project,\n File is kept on disk.')
+        removeImageEntryButton.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        removeImageEntryButton.setMinimumHeight(35)
         removeImageEntryButton.clicked.connect(self.removeImageEntryButton_onClick)
         curImageButtonLayout.addWidget(removeImageEntryButton)
         
         removeDeleteImageButton = QPushButton('Remove & Delete Image', self)
         removeDeleteImageButton.setToolTip('Removes image from project,\n File is deleted from disk.')
+        removeDeleteImageButton.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        removeDeleteImageButton.setMinimumHeight(35)
         removeDeleteImageButton.clicked.connect(self.removeDeleteImageButton_onClick)
         curImageButtonLayout.addWidget(removeDeleteImageButton)
         
@@ -1460,6 +1584,8 @@ class ImageLabelerProject(QWidget):
         # -- -- --
         self.generateAllImagePromptButton = QPushButton('Generate ALL Image Prompts', self)
         self.generateAllImagePromptButton.setToolTip('Create Prompts from ALL Images, BLIP Img2Txt')
+        self.generateAllImagePromptButton.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.generateAllImagePromptButton.setMinimumHeight(35)
         self.generateAllImagePromptButton.clicked.connect(self.generateAllImagePromptButton_onClick)
         curImageButtonLayout.addWidget(self.generateAllImagePromptButton)
         
@@ -1467,6 +1593,8 @@ class ImageLabelerProject(QWidget):
         
         self.findAllFacesButton = QPushButton('Find ALL Faces', self)
         self.findAllFacesButton.setToolTip('Auto Find Faces in ALL Images; Face Helper')
+        self.findAllFacesButton.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.findAllFacesButton.setMinimumHeight(35)
         self.findAllFacesButton.clicked.connect(self.findAllFacesButton_onClick)
         curImageButtonLayout.addWidget(self.findAllFacesButton)
         
@@ -1474,8 +1602,12 @@ class ImageLabelerProject(QWidget):
         
         self.updateCropButton = QPushButton('Update GL Crop Window', self)
         self.updateCropButton.setToolTip('Load Image into GL Crop Window')
+        self.updateCropButton.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self.updateCropButton.setMinimumHeight(35)
         self.updateCropButton.clicked.connect(self.updateCropButton_onClick)
         curImageButtonLayout.addWidget(self.updateCropButton)
+        
+        curImageButtonLayout.addStretch(1)
         
         # -- -- --
         
@@ -1532,6 +1664,14 @@ class ImageLabelerProject(QWidget):
         self.curImageDataLayout.addWidget(cropFacesBlock)
         
         # -- -- --
+        
+        
+        # image path
+        imgPath = "assets/foundFacesTemp.jpg" # os.path.join( ImageLabelerScriptDir, "assets/foundFacesTemp.jpg" )
+        pixmap = QtGui.QPixmap( imgPath )
+        
+        
+        # -- -- --
         faceImageAlignedBlock = QWidget()
         faceImageAlignedLayout = QVBoxLayout()
         faceImageAlignedLayout.setAlignment(QtCore.Qt.AlignCenter)
@@ -1576,25 +1716,17 @@ class ImageLabelerProject(QWidget):
         glSaveRenderPath = os.path.join( ImageLabelerScriptDir, "ViewportGLSaves" )
         
         self.glSmartBlur = pxlViewerGL.ViewportWidget(self,0,"smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
-        #self.glSmartBlur.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glSmartBlur)
-        self.glSmartBlur.imageOffset(pixres[0], pixres[1])
         # -- -- --
         """
         self.glEdgeFinding = pxlViewerGL.ViewportWidget(self,1,"edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", saveImagePath=glSaveRenderPath )
-        #self.glEdgeFinding.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glEdgeFinding)
-        self.glEdgeFinding.imageOffset(pixres[0], pixres[1])
         # -- -- --
         self.glSegmentation = pxlViewerGL.ViewportWidget(self,2,"segment", "assets/glSegmentation_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
-        #self.glSegmentation.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glSegmentation)
-        self.glSegmentation.imageOffset(pixres[0], pixres[1])
         # -- -- --
         self.glTexture = pxlViewerGL.ViewportWidget(self,3,"default", saveImagePath=glSaveRenderPath )
-        #self.glTexture.resize( pixres[0], pixres[1] )
         self.glBlockLayout.addWidget(self.glTexture)
-        self.glTexture.imageOffset(pixres[0], pixres[1])
         """
         #self.glSegmentation.passTargetGL( self.glTexture.textureGLWidget )
         # -- -- --
@@ -1629,6 +1761,7 @@ class ImageLabelerProject(QWidget):
         # -- -- --
         addClassifierButton = QPushButton('Add Classifier', self)
         addClassifierButton.setToolTip('Add a new Classifier option to List')
+        addClassifierButton.setMinimumHeight(35)
         addClassifierButton.clicked.connect(self.addClassifierButton_onClick)
         glSettingsBlockLayout.addWidget(addClassifierButton)
         # -- -- --
@@ -1636,6 +1769,7 @@ class ImageLabelerProject(QWidget):
         # -- -- --
         self.saveCropButton = QPushButton('Save Crop', self)
         self.saveCropButton.setToolTip('Save cropped image above')
+        self.saveCropButton.setMinimumHeight(35)
         self.saveCropButton.clicked.connect(self.saveCropButton_onClick)
         glSettingsBlockLayout.addWidget(self.saveCropButton)
         # -- -- --
@@ -1646,13 +1780,6 @@ class ImageLabelerProject(QWidget):
         
         # -- -- --
         
-        
-        # -- -- -- -- -- -- -- -- -- -- --
-        # Set Final Self.Geometry Settings
-        geopos = [ 0, 0 ]
-        geosize = [ pixres[0] + pixres[0] + pixoffset[0]*2, pixres[1]+pixoffset[1]*2+pad*2 ]
-        #self.setGeometry( geopos[0], geopos[1], geosize[0], geosize[1] )
-        #self.manager.setProjectViewGeometry( geopos[0], geopos[1], geosize[0], geosize[1] )
         
         # Trip first item's onClick
         self.fileList_onSelectionChanged()
@@ -1665,15 +1792,13 @@ class ImageLabelerProject(QWidget):
         self.resizeTimer.timeout.connect(self.fitRawResizeTimeout) 
     
         self.geometryStore = self.geometry()
-        print( self.geometryStore )
+        #print( self.geometryStore )
     
     def resize(self):
         self.fitRawPixmapToView(True)
         if hasattr( self, 'glTexture' ) :
             self.glTexture.update()
         
-    def test(self):
-        print("Test hit")
         
     # -- -- -- -- -- -- -- -- -- -- -- --
     # -- UI Event Listener Functions - -- --
@@ -1781,8 +1906,8 @@ class ImageLabelerProject(QWidget):
         self.manager.showStatus("ImageToPrompt : Finding Prompt in '"+curWidget.fileName+"'")
         foundPrompt = self.imagePromptFinder.interrogate( curImageFullPath )
         self.curFileObject.data['prompt'] = foundPrompt
-        print( curWidget.fileName," -- " )
-        print("  ",foundPrompt)
+        #print( curWidget.fileName," -- " )
+        #print("  ",foundPrompt)
         #print( curWidget.fileName )
         #print( self.manager.imageList[self.curFolderPath][curWidget.id] )
         self.updatePromptDisplay()
@@ -1890,11 +2015,12 @@ class ImageLabelerProject(QWidget):
                     
     @QtCore.pyqtSlot()
     def updateCropButton_onClick(self):
-        curItem = self.fileList.currentItem()
-        curWidget = self.fileList.itemWidget(curItem)
-        curImageFullPath = curWidget.fullPath
-        self.glTexture.loadImage( curImageFullPath )
-        self.setFocus()
+        if hasattr(self, 'glTexture') :
+            curItem = self.fileList.currentItem()
+            curWidget = self.fileList.itemWidget(curItem)
+            curImageFullPath = curWidget.fullPath
+            self.glTexture.loadImage( curImageFullPath )
+            self.setFocus()
         
     @QtCore.pyqtSlot()
     def addClassifierButton_onClick(self):
@@ -1906,7 +2032,7 @@ class ImageLabelerProject(QWidget):
             
     @QtCore.pyqtSlot()
     def saveCropButton_onClick(self):
-        if self.glTexture != None :
+        if hasattr(self, 'glTexture') :
             curBuffer = self.glTexture.grabFrameBuffer(withAlpha=False)
             curItem = self.outputClassifier.currentItem()
             if curItem :
@@ -1929,6 +2055,10 @@ class ImageLabelerProject(QWidget):
     def folderList_onSelectionChanged(self):
         curItem = self.folderList.currentItem()
         curWidget = self.folderList.itemWidget(curItem)
+        if self.curFolderObject:
+            self.curFolderObject.setCurrent(False)
+        self.curFolderObject = curWidget 
+        self.curFolderObject.setCurrent(True)
         if curWidget:
             self.curFolderPath = curWidget.fullPath
             self.rebuildFileList(curWidget.fullPath)
@@ -1939,14 +2069,7 @@ class ImageLabelerProject(QWidget):
         
     @QtCore.pyqtSlot()
     def folderList_onItemDoubleClick(self):
-        curItem = self.folderList.currentItem()
-        curWidget = self.folderList.itemWidget(curItem)
-        if curWidget:
-            self.curFolderPath = curWidget.fullPath
-            self.rebuildFileList(curWidget.fullPath)
-        else:
-            print("Failed to find current Folter Item")
-        self.setFocus()
+        self.folderList_onSelectionChanged()
         
     @QtCore.pyqtSlot()
     def fileList_onSelectionChanged(self):
@@ -1958,7 +2081,11 @@ class ImageLabelerProject(QWidget):
     def loadSelectedFile(self, loadToGL = False):
         curItem = self.fileList.currentItem()
         curWidget = self.fileList.itemWidget(curItem)
+        
+        if self.curFileObject:
+            self.curFileObject.setCurrent(False)
         self.curFileObject = curWidget 
+        self.curFileObject.setCurrent(True)
         if curWidget:
             self.loadImageFile( self.curFileObject.fullPath, loadToGL )
             self.updatePromptDisplay()
@@ -1992,7 +2119,8 @@ class ImageLabelerProject(QWidget):
             curItem = self.folderList.currentItem()
             curWidget = self.folderList.itemWidget(curItem)
             self.curFolderPath = curWidget.fullPath
-        
+            self.curFolderObject = curWidget 
+            self.curFolderObject.setCurrent(True)
         # File List
         self.fileList.clear()
         self.curFileListItem = None
@@ -2011,6 +2139,7 @@ class ImageLabelerProject(QWidget):
             curFileItemWidget = QListWidgetItem(self.fileList)
             curFileItemWidget.setSizeHint(curFileItem.sizeHint())
             if self.curFileListItem == None:
+                curFileItem.setCurrent(True)
                 self.curFileListItem = curFileItemWidget
 
             self.fileList.addItem(curFileItemWidget)
@@ -2247,12 +2376,12 @@ class ImageLabelerProject(QWidget):
             linkedDict = self.manager.imageList[folderPath][curFileItemRow]
             isCorrectPath = fullPath == linkedDict['filePath']
             if isCorrectPath :
-                print("Deleting ImageFile from Disk - ")
+                print("Deleting ImageFile from Project - ")
                 print(fullPath)
                 del self.manager.imageList[folderPath][curFileItemRow]
                 if len( self.manager.imageList[folderPath] ) == 0:
                     del self.manager.imageList[folderPath]
-                    print("Deleting Folder from Disk - ")
+                    print("Deleting Folder from Project - ")
                     print(folderPath)
             else:
                 print("ImageList <> DirectoryListing missmatch detected,\n Not deleting file or folder - ")
@@ -2262,6 +2391,10 @@ class ImageLabelerProject(QWidget):
             print("SAVE DATA")
             self.manager.saveProjectData()
         
+        if self.confirmFileDeletion and deleteFileOnDisk:
+            ret = QMessageBox.question(self,'', "Delete current image from disk?", QMessageBox.Yes | QMessageBox.No)
+            deleteFileOnDisk = ret == QMessageBox.Yes
+            
         if deleteFileOnDisk :
             os.remove( fullPath )
             if isDiskFolderEmpty :
