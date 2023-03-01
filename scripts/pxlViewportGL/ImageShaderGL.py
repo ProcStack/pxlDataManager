@@ -17,29 +17,91 @@ from PyQt5.QtWidgets import *
 from PyQt5.uic import *
 
 
-#import json
-#f = open( "qtWidgetsFuncDump.txt", "w")
-#f.write(json.dumps(dir(QtWidgets), indent = 2))
-#f.close()
-
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 
+# To create a Image Shader Widget with User Controls
+#   An Image displayed through OpenGL with gui controllers of Uniform values
+# Run --
+#   ImageShaderWidget(
+#       glEffect = * Use one of the options listed below *
+#       initTexturePath = * The path to an image to display *
+#       saveImagePath = * The path to save images on disk *
+#     )
+#
+#   '''
+#   ImageShaderWidget(
+#       glEffect = "smartBlur",
+#       initTexturePath = "assets/glTempTex.jpg",
+#       saveImagePath = "outputs/glImages/smarBlurImages"
+#     )
+#   '''
+#
+#   This returns a QWidget to add into a QLayout
+#
+# -- -- --
+#
+# Possible 'glEffect' options --
+#   'Default'
+#     - Displays the UVs of the render, no textures displayed, a black/red/green/yellow display
+#     - Good for testing if the OpenGL widget is working
+#
+#   'Raw Texture'
+#     - Displays the input image path, no effects applied
+#
+#   'Smart Blur'
+#     - Blur subtle details of near by pixels together
+#     - Good for sharpening edges as well
+#     - Similar to Photoshops smart blur
+#
+#   'Edge Detect'
+#     - Find edges in an image within a given threshold and thickness
+#
+#   'Segment'
+#     - Find congruent shapes in your image
+#     - These shapes are uniquely colored by region
+#     - "Region Seeds" can be moved around for easier shape finding in your image
+#
+#   'Paint Mask'
+#     - Interactive mask painting
+#     - With brush hardness/blur/feathering
+#
+#   'Color Correct'
+#     - Tweak image colors
+#         Hue, Saturation, Brightness, Gamma, Vibrance, etc.
+#
+# You can use any formating and prefix- -suffix of the 'glEffect' name
+#   If you want to use the 'Raw Texture' shader
+#     It could be 'Raw Texture', 'rawTexture', 'ra W te x TU r e', or 'Raw Texture First View' even
+#       Capitals, spaces, prefixes, and suffixes don't matter
+#     But in file names saving to disk, spaces are converted to "_"
+#       So 'ra W te x TU r e' becomes 'ra_W_te_x_TU_r_e' in file name
+#
+# -- -- --
+#
+# Custom shaders not yet supported
+# Any edits/tweaks to existing shader.py files would require making a new Image Shader Widget
+#   Or closing and re-opening your PyQt Application
 #
 
+# -- -- -- -- -- -- -- -- -- -- -- -- --
 
-# Handled Uniform Control Types ---
+# For custom shaders -
+#
+# Built-In Uniform Control Types ---
 #   ( As set in 'glShaders/SHADER_NAME.py' uniforms[UNIFORM_NAME]['control'] )
+#
 # -- -- --
-# Uniform Control Type -
-#   "offset"    - Mouse Left Click Drag; Shift UVs;
+#
+# Uniform Controller Types -
+#   "offset"    - Mouse Left Click Drag
 #                   vec2( offsetX, offsetY)
-#   "scale"     - Mouse Right Click Drag; Scale UVs;
+#   "scale"     - Mouse Right Click Drag
 #                   vec2( scaleX, scaleY )
 #   "texelSize" - (1 / Image Resolution);
 #                   vec2( 1/textureWidth, 1/textureHeight )
-#   "visible"   - Will create a GUI element for the User to control the uniform value
+#   "visible"   - Will create a GUI element for the User to control the Uniform's value
 
 
 
@@ -50,15 +112,6 @@ from PyQt5.uic import *
 
 
 
-# -- -- -- -- -- -- -- -- -- -- -- -- --
-
-# Tying a string around my finger here --
-#   In other use cases of shared context treated the widget itself
-#     As an offscreen renderer only
-# Passing 'QWidget' instead of 'QOpenGLWidget'
-#   Separating the context and offscreen surface
-# If issues, try this approach!
-#   ... I'm going to forget, I know it ...
 
 #class TextureGLWidget(QtWidgets.QOpenGLWidget):
 class TextureGLWidget(QtGui.QOpenGLWindow):
@@ -214,7 +267,7 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             scriptAbsPath = os.path.abspath(__file__)
             scriptPath = os.path.dirname(scriptAbsPath)
             self.outImageFolderPath = os.path.join( scriptPath, "ViewportGLSaves" )
-        self.outImageName = self.glEffect
+        self.outImageName = self.glEffect.replace(" ","_")
         self.outImageFormat = "PNG"
         self.outImagePad = 4
         self.outImagePrefix = None
@@ -418,23 +471,24 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             #self.glTargetObject.setTextureFromImageData( 0, displayImage )
             
     def loadProgram(self, glEffect="default"):
+        glEffect = glEffect.lower().replace(" ","")
         
-        if glEffect == "rawTexture":
+        if "rawtexture" in glEffect:
             from .glShaders import rawTextureShader as Shader
             
-        elif glEffect == "smartBlur":
+        elif "smartblur" in glEffect:
             from .glShaders import smartBlurShader as Shader
             
-        elif glEffect == "edgeDetect":
+        elif "edgedetect" in glEffect:
             from .glShaders import edgeDetectShader as Shader
             
-        elif glEffect == "segment":
+        elif "segment" in glEffect:
             from .glShaders import segmentShader as Shader
             
-        elif glEffect == "paintMask":
+        elif "paintmask" in glEffect:
             from .glShaders import paintMaskShader as Shader
             
-        elif glEffect == "colorCorrect":
+        elif "colorcorrect" in glEffect:
             from .glShaders import colorCorrectShader as Shader
             
         else: # Default to "default"; This will cause issues during dev
