@@ -1,5 +1,18 @@
 
 
+/* -- -- -- -- -- -- -- -- */
+/* -- CSS Order Matters -- */
+/* -- -- -- -- -- -- -- -- */
+
+
+QWidget {
+  background: #454545;
+}
+
+
+/* -- -- -- */
+
+
 
 QMenuBar {
   color:#cccccc;
@@ -67,11 +80,37 @@ QMenu::indicator {
 
 
 
+
 /* -- -- -- */
 
-QWidget {
-  background: #454545;
+QStatusBar {
+  border-width: 2px 0px 0px 0px;
+  border-style: solid ;
+  border-color: #353535;
+  background: qlineargradient( y1:0, y2:1, stop:0.1 #959595, stop:.15 #656565, stop:1 #454545);
 }
+
+QStatusBar QSizeGrip {
+  background : qlineargradient(x1:.25, y1:.15, x2:1, y2:.85, stop:0 transparent, stop:1 #757575);
+}
+
+/* Default Status or Prep Alert */
+QStatusBar {
+  font-weight:500;
+  color: #3fd3ff;
+}
+/* Return or Successful */
+QStatusBar#importance_1 {
+  font-weight:600;
+  color: #4ce3ff;
+}
+/* Warning, Fail, Error */
+QStatusBar#importance_2 {
+  font-weight:600;
+  color: #ffc033;
+}
+
+
 
 /* -- -- -- */
 
@@ -244,17 +283,17 @@ QScrollBar::up-arrow:vertical, QScrollBar::down-arrow:vertical {
 /* -- -- -- */
 
 QSlider::groove:horizontal {
-    border: 1px solid #999999;
-    height: 8px; 
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #bbbbbb, stop:1 #cccccc);
-    margin: 2px 0;
+  border: 1px solid #999999;
+  height: 8px; 
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #bbbbbb, stop:1 #cccccc);
+  margin: 2px 0;
 }
 
 QSlider::handle:horizontal {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #b4b4b4, stop:1 #8f8f8f);
-    border: 1px solid #5c5c5c;
-    width: 18px;
-    margin: -5px 0;
-    border-radius: 3px;
+  background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #b4b4b4, stop:1 #8f8f8f);
+  border: 1px solid #5c5c5c;
+  width: 18px;
+  margin: -5px 0;
+  border-radius: 3px;
 }
 

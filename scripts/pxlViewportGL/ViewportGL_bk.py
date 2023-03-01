@@ -993,38 +993,27 @@ class ViewportWidget(QWidget):
         
         self.textureGLWidget = TextureGLWidget( None, glId, glEffect, initTexturePath, saveImagePath )
         self.textureGLWidget.setFixedWidth(512)
-        self.textureGLWidget.setMinimumHeight(512)
-        self.textureGLWidget.setMaximumHeight(600)
+        self.textureGLWidget.setFixedHeight(512)
         self.viewportLayout.addWidget(self.textureGLWidget)
-        
-        shaderSideBarBlock = QWidget()
-        self.shaderSideBarLayout = QVBoxLayout()
-        self.shaderSideBarLayout.setContentsMargins(0,2,0,2)
-        self.shaderSideBarLayout.setSpacing(5)
-        shaderSideBarBlock.setLayout(self.shaderSideBarLayout)
-        self.textureGLWidget.setMaximumWidth(250)
-        self.viewportLayout.addWidget(shaderSideBarBlock)
-        
-        # -- -- --
         
         shaderOptionsBlock = QWidget()
         self.shaderOptionsLayout = QVBoxLayout()
         self.shaderOptionsLayout.setContentsMargins(0,2,0,2)
-        self.shaderOptionsLayout.setSpacing(5)
+        self.shaderOptionsLayout.setSpacing(2)
         shaderOptionsBlock.setLayout(self.shaderOptionsLayout)
-        #self.textureGLWidget.setMaximumWidth(250)
-        self.shaderSideBarLayout.addWidget(shaderOptionsBlock)
+        self.textureGLWidget.setMaximumWidth(250)
+        self.viewportLayout.addWidget(shaderOptionsBlock)
         
         # -- -- --
         
         self.glButtonLayout = QHBoxLayout()
         self.glButtonLayout.setContentsMargins(0,0,0,0)
-        self.glButtonLayout.setSpacing(5)
-        self.shaderSideBarLayout.addLayout(self.glButtonLayout)
+        self.glButtonLayout.setSpacing(2)
+        self.mainLayout.addLayout(self.glButtonLayout)
         
         saveRenderButton = QPushButton('Save Image', self)
         saveRenderButton.setToolTip('Save current ViewportGL to Image File')
-        saveRenderButton.setFixedHeight(35)
+        saveRenderButton.setFixedHeight(30)
         saveRenderButton.clicked.connect(self.saveRenderButton_onClick)
         self.glButtonLayout.addWidget(saveRenderButton)
 
@@ -1054,13 +1043,13 @@ class ViewportWidget(QWidget):
         if self.textureGLWidget.hasSimTimer :
             runSimButton = QPushButton('Run Sim', self)
             runSimButton.setToolTip('Run sim a set number of times')
-            runSimButton.setFixedHeight(35)
+            runSimButton.setFixedHeight(30)
             runSimButton.clicked.connect(self.textureGLWidget.simTimeout)
             self.glButtonLayout.addWidget(runSimButton)
             
             setTargetGLButton = QPushButton('Set TargetGL', self)
             setTargetGLButton.setToolTip('Pass swap buffer texture to another GL Context')
-            setTargetGLButton.setFixedHeight(35)
+            setTargetGLButton.setFixedHeight(30)
             setTargetGLButton.clicked.connect(self.setTargetGLButton_onClick)
             self.glButtonLayout.addWidget(setTargetGLButton)
     
@@ -1069,13 +1058,12 @@ class ViewportWidget(QWidget):
             uData = controls[uniform]
             controlLayout = QHBoxLayout()
             controlLayout.setContentsMargins(0,0,0,10)
-            controlLayout.setSpacing(5)
+            controlLayout.setSpacing(2)
             # -- -- --
             uLabelText = uniform
             uLabelText = "".join(list(map(lambda x: " "+x if x.isupper() else x, uLabelText)))
             uLabelText = uLabelText[0].capitalize() + uLabelText[1::]
             controlLabelText = QLabel( uLabelText, self)
-            controlLabelText.setFont(QtGui.QFont("Tahoma",9,QtGui.QFont.Bold))
             #controlLabelText.setAlignment(QtCore.Qt.AlignCenter)
             #controlLabelText.setStyleSheet("border: 1px solid black;")
             controlLayout.addWidget(controlLabelText)
@@ -1092,7 +1080,6 @@ class ViewportWidget(QWidget):
             sliderList = []
             for val in valList:
                 curSlider = QSlider( QtCore.Qt.Horizontal )
-                curSlider.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
                 #curSlider.setGeometry(30, 40, 200, 30)
                 curSlider.setMinimum( int(valLimits[0]*(10**multVal)) )
                 curSlider.setMaximum( int(valLimits[1]*(10**multVal)) )
@@ -1125,6 +1112,7 @@ class ViewportWidget(QWidget):
         
         try:
             glTextureWidget = super().parent().parent().parent().glTexture
+            #print( super().parent().parent().parent().test() )
         except:
             pass;
             

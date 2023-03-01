@@ -51,19 +51,26 @@ For now, custom implementations are not being added to `pxlDataManager` as its o
 ## What's In pxlDataManager?
 *(All scripts have stand-alone PyQt5 versions, works-in-progress though.)*
 
- - `pxlDataManager.py` <br> **MAIN**; Primary Image Organization Manager; Import folder hierarchies of images for easy viewing, including all below image and file tools. While also organizing the outputs from all the scripts below in `./Projects/PROJECT_NAME`
+ - `pxlDataManager.py` <br> **MAIN**; Primary Image Organization Manager; Used for scanning folder hierarchies of images and maintaining Image Data Projects. While also organizing the outputs from all the scripts below in `./Projects/PROJECT_NAME`
+ 
+ - `./scripts/pxlDataProject.py` <br> **MAIN**; Image Data Project Editor; View folder hierarchies of images for easy viewing, including all below scripts listed below.
 
- - `utils/ControlNetGenerator.py` <br> **WIP** ControlNet Preprocessors; Generate and alter ControlNet data prior to AI usage.
+ - `./scripts/FileIngester.py` <br> Load all found files within directories for adding arbitrary data.  This creates JSON dictionary files with any custom user data saved.  This extends the limitations of image META data, but only within the `FileIngester.py` / `pxlDataManager.py` pipelines.
+ 
+ - `./scripts/TrainingLabelGenerator.py` <br> Easy file organizations and text editor for Prompt'ed images for AI training.  <br> Will export Image + Text file pairs for easy injestion for Textural Inversion and HyperNet training.
+ 
+ - `./scripts/pxlViewportGL/ContextGL.py` <br> **WIP** Primary OpenGL Context Manager; Used for maintaining an OpenGL Shared Context   
+ 
+ - `./scripts/pxlViewportGL/ViewportGL.py` <br> **WIP** Functions for image viewer widget creation and dynamic sourcing of shaders from `./scripts/pxlViewportGL/glShaders`  
+ 
+ - `./scripts/utils/ControlNetGenerator.py` <br> **WIP** ControlNet Preprocessors; Generate and alter ControlNet data prior to AI usage.
 
- - `utils/ViewportGL.py` <br> **WIP** PyOpenGL scripts for easy image cropping, interaction, and visual effects.  
+ - `./scripts/utils/FaceFinder.py` <br> Find, Isolate, and Align faces in provided images. Based on `GFPGAN`
+ 
+ - `./scripts/utils/ImageToPrompt.py` <br> Generate a Prompt from a provided Image. Currently only using BLIP.  Based on `clip-interrogator`
+ 
+ - `./scripts/utils/UserSettingsManager.py` <br> Module to maintain settings.  With support for nested module settings in one 'UserSettings.json' file.
 
- - `utils/FaceFinder.py` <br> Find, Isolate, and Align faces in provided images. Based on `GFPGAN`
-
- - `utils/FileIngester.py` <br> Load all found files within directories for adding arbitrary data.  This creates JSON dictionary files with any custom user data saved.  This extends the limitations of image META data, but only within the `FileIngester.py` / `pxlDataManager.py` pipelines.
-
- - `utils/ImageToPrompt.py` <br> Generate a Prompt from a provided Image. Currently only using BLIP.  Based on `clip-interrogator`
-
- - `utils/TrainingLabelGenerator.py` <br> Easy file organizations and text editor for Prompt'ed images for AI training.  <br> Will export Image + Text file pairs for easy injestion for Textural Inversion and HyperNet training.
 <br/>
 <br/>
 
