@@ -15,7 +15,8 @@ from PyQt5.uic import *
 #from basicsr.utils import imwrite
 
 from .utils import UserSettingsManager as pxlSettings
-from .pxlViewportGL import ContextGL, ViewportGL
+from .pxlViewportGL import ContextGL, ImageShaderGL
+#from .pxlViewportGL import ContextGL, ImageShaderGL, ViewportGL
 
 
 # -- -- --
@@ -758,30 +759,31 @@ class ImageDataProject(QWidget):
         
         glSaveRenderPath = os.path.join( self.DataManagmentRootPath, "ViewportGLSaves" )
         
-        self.glSmartBlur = ViewportGL.ViewportWidget(self,0,"smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
+        
+        self.glContext = ContextGL.ContextGLManager()
+        
+        #self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContext.format(), "smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
+        self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContext.format(), "rawTexture", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glSmartBlur)
+        self.glContext.contextCreated.connect( self.glSmartBlur.setSharedGlContext )
         # -- -- --
         """
-        self.glEdgeFinding = ViewportGL.ViewportWidget(self,1,"edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", saveImagePath=glSaveRenderPath )
+        self.glEdgeFinding = ImageShaderGL.ImageShaderWidget(self,1, self.glContext.format(), "edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glEdgeFinding)
+        self.glContext.contextCreated.connect( self.glEdgeFinding.setSharedGlContext )
         # -- -- --
-        self.glSegmentation = ViewportGL.ViewportWidget(self,2,"segment", "assets/glSegmentation_tmp1_alpha.png", saveImagePath=glSaveRenderPath )
+        self.glSegmentation = ImageShaderGL.ImageShaderWidget(self,2, self.glContext.format(), "segment", "assets/glSegmentation_tmp1_alpha.png", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glSegmentation)
+        self.glContext.contextCreated.connect( self.glSegmentation.setSharedGlContext )
         # -- -- --
-        self.glTexture = ViewportGL.ViewportWidget(self,3,"default", saveImagePath=glSaveRenderPath )
+        self.glTexture = ImageShaderGL.ImageShaderWidget(self,3, self.glContext.format(), "default", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glTexture)
+        self.glContext.contextCreated.connect( self.glTexture.setSharedGlContext )
         """
         #self.glSegmentation.passTargetGL( self.glTexture.textureGLWidget )
         # -- -- --
         
-        # self.glSmartBlur.connect( self.glEdgeFinding.createContext )
-        # self.glSmartBlur.connect( self.glSegmentation.createContext )
-        # self.glSmartBlur.connect( self.glTexture.createContext )
-        
-        #self.glSmartBlur.initializeContext()
-        #self.glEdgeFinding.initializeContext()
-        #self.glSegmentation.initializeContext()
-        #self.glTexture.initializeContext()
+        self.glBlockLayout.addWidget(self.glContext)
         
         
         # -- -- -- -- -- -- -- -- -- -- --

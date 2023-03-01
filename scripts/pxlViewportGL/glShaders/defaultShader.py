@@ -1,38 +1,21 @@
 
-uniforms = {
-    "samplerTex" : {"type":"texture"},
-    "texOffset" : {
-        "type":"vec2",
-        "default":[0,0],
-        "control":"texOffset"
-    },
-    "texScale" : {
-        "type":"vec2",
-        "default":[1,1],
-        "control":"texScale"
-    }
-}
-
+uniforms = {}
 
 
 vertex = '''
-
     #version 330
 
     in vec2 position;
     in vec2 uv;
 
-    out vec3 newColor;
+    out vec3 vCd;
     out vec2 vUv;
-
-    uniform mat4 transform; 
 
     void main() {
 
         gl_Position = vec4(position, 0.0f, 1.0f);
-        newColor = vec3(uv.x, uv.y, 0.0f);
+        vCd = vec3(uv.x, uv.y, 0.0f);
         vUv = uv;
-
     }
 '''
 
@@ -40,20 +23,13 @@ vertex = '''
 fragment = '''
     #version 330
 
-    uniform sampler2D samplerTex;
-    uniform vec2 texOffset;
-    uniform vec2 texScale;
-    
-    in vec3 newColor;
+    in vec3 vCd;
     in vec2 vUv;
 
     out vec4 outColor;
 
     void main() {
-        vec2 scaledUv = vUv;// * texScale + texOffset;
-        vec4 outCd = texture( samplerTex, scaledUv );
-        outColor = outCd;
+        outColor = vec4( vUv.xy, 0.0, 1.0 );
     }
-
 '''
 

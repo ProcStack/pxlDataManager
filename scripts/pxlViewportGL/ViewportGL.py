@@ -1,4 +1,21 @@
 
+# !! NOTE !!
+# This file was renamed to 'ImageShaderGL.py'
+#   For Image specific shaders
+#
+# This file will be updated to a 3d viewport for OpenPose
+#   And other AI / Image Shader output agregation
+# With interactive posing of the sorce image by
+#   Tweaking the OpenPose bones in real time
+#     3d-ifying your source 2d image
+#
+# This file isn't used yet, and will be rewritten before its usage
+#   Leaving he file here for bootstraping reasons
+#     Since 'ImageShaderGL.py' will dramatically change 
+
+
+
+
 # Built on Python 3.10.6 && PyQt5 5.15.9
 
 import sys, os
@@ -53,15 +70,11 @@ from PyQt5.uic import *
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 
 
-class TextureGLWidget(QtWidgets.QOpenGLWidget):
-#class TextureGLWidget(QtOpenGL.QGLWidget):
+class ViewportGLWidget(QtWidgets.QOpenGLWidget):
     contextCreated = QtCore.pyqtSignal( QtGui.QOpenGLContext )
 
     def __init__(self,parent=None, glId=0, glEffect="default", initTexturePath="assets/glTempTex.jpg", saveImagePath=None ):
-        #QtWidgets.QOpenGLWidget.__init__(self,parent)
-        #QtOpenGL.QGLWidget.__init__(self,parent)
-        #QtOpenGL.QGLWidget.__init__(self, QtOpenGL.QGLFormat(), parent)
-        super(TextureGLWidget, self).__init__(parent) 
+        super(ViewportGLWidget, self).__init__(parent) 
         
         # -- -- --
         
@@ -852,7 +865,7 @@ class TextureGLWidget(QtWidgets.QOpenGLWidget):
             print("No registered Uniform '",uniformName,"'")
     def saveNextPass(self):
         self.saveNextRender = True
-        #self.textureGLWidget.paintGL()
+        #self.viewportGLWidget.paintGL()
         
     def saveBuffer(self, sourceBuffer=None, savePath=None, saveName="bufferOut", saveFormat=None, stepFrameCount=True ):
         self.paintGL()
@@ -959,7 +972,7 @@ class ViewportWidget(QWidget):
         self.glEffect = glEffect
         self.saveImagePath = saveImagePath
         
-        self.textureGLWidget = None
+        self.viewportGLWidget = None
         
         # -- -- --
         
@@ -974,18 +987,18 @@ class ViewportWidget(QWidget):
         
         # -- -- --
         
-        self.textureGLWidget = TextureGLWidget( None, glId, glEffect, initTexturePath, saveImagePath )
-        self.textureGLWidget.setFixedWidth(512)
-        self.textureGLWidget.setMinimumHeight(512)
-        self.textureGLWidget.setMaximumHeight(600)
-        self.viewportLayout.addWidget(self.textureGLWidget)
+        self.viewportGLWidget = ViewportGLWidget( None, glId, glEffect, initTexturePath, saveImagePath )
+        self.viewportGLWidget.setFixedWidth(512)
+        self.viewportGLWidget.setMinimumHeight(512)
+        self.viewportGLWidget.setMaximumHeight(600)
+        self.viewportLayout.addWidget(self.viewportGLWidget)
         
         shaderSideBarBlock = QWidget()
         self.shaderSideBarLayout = QVBoxLayout()
         self.shaderSideBarLayout.setContentsMargins(0,2,0,2)
         self.shaderSideBarLayout.setSpacing(5)
         shaderSideBarBlock.setLayout(self.shaderSideBarLayout)
-        self.textureGLWidget.setMaximumWidth(250)
+        self.viewportGLWidget.setMaximumWidth(250)
         self.viewportLayout.addWidget(shaderSideBarBlock)
         
         # -- -- --
@@ -995,7 +1008,7 @@ class ViewportWidget(QWidget):
         self.shaderOptionsLayout.setContentsMargins(0,2,0,2)
         self.shaderOptionsLayout.setSpacing(5)
         shaderOptionsBlock.setLayout(self.shaderOptionsLayout)
-        #self.textureGLWidget.setMaximumWidth(250)
+        #self.viewportGLWidget.setMaximumWidth(250)
         self.shaderSideBarLayout.addWidget(shaderOptionsBlock)
         
         # -- -- --
@@ -1017,28 +1030,28 @@ class ViewportWidget(QWidget):
         
     def connect(self, signalFunc = None):
         if signalFunc != None:
-            self.textureGLWidget.contextCreated.connect( signalFunc )
+            self.viewportGLWidget.contextCreated.connect( signalFunc )
         
     @QtCore.pyqtSlot( QtGui.QOpenGLContext )
     def createContext(self, sharedContext ):
-        self.textureGLWidget.setSharedContext( sharedContext )
+        self.viewportGLWidget.setSharedContext( sharedContext )
         
     def initializeContext(self):
-        self.textureGLWidget.initializeContext()
+        self.viewportGLWidget.initializeContext()
         
     def imageOffset(self,x,y, setOffset=True):
-        if self.textureGLWidget:
-            self.textureGLWidget.imageOffset(x,y,setOffset)
+        if self.viewportGLWidget:
+            self.viewportGLWidget.imageOffset(x,y,setOffset)
     def imageScale(self,x,y, setScale=True):
-        if self.textureGLWidget:
-            self.textureGLWidget.imageScale(x,y,setScale)
+        if self.viewportGLWidget:
+            self.viewportGLWidget.imageScale(x,y,setScale)
     def createControls( self, controls ):
     
-        if self.textureGLWidget.hasSimTimer :
+        if self.viewportGLWidget.hasSimTimer :
             runSimButton = QPushButton('Run Sim', self)
             runSimButton.setToolTip('Run sim a set number of times')
             runSimButton.setFixedHeight(35)
-            runSimButton.clicked.connect(self.textureGLWidget.simTimeout)
+            runSimButton.clicked.connect(self.viewportGLWidget.simTimeout)
             self.glButtonLayout.addWidget(runSimButton)
             
             setTargetGLButton = QPushButton('Set TargetGL', self)
@@ -1091,16 +1104,16 @@ class ViewportWidget(QWidget):
         print("Save ViewportGL to Disk")
         print( self.saveImagePath )
         
-        #self.textureGLWidget.saveNextPass()
+        #self.viewportGLWidget.saveNextPass()
         #return;
         
         colorFileName = self.glEffect+"Out"
         
-        if self.textureGLWidget.hasFrameBuffer :
+        if self.viewportGLWidget.hasFrameBuffer :
             colorFileName = self.glEffect+"_colorOut"
             bufferFileName = self.glEffect+"_bufferOut"
-            self.textureGLWidget.saveBuffer( sourceBuffer=self.textureGLWidget.frameBufferObject, saveName=bufferFileName )
-        self.textureGLWidget.saveBuffer( sourceBuffer=0, saveName=self.glEffect+"Out" )
+            self.viewportGLWidget.saveBuffer( sourceBuffer=self.viewportGLWidget.frameBufferObject, saveName=bufferFileName )
+        self.viewportGLWidget.saveBuffer( sourceBuffer=0, saveName=self.glEffect+"Out" )
         
     @QtCore.pyqtSlot()
     def setTargetGLButton_onClick(self):
@@ -1113,22 +1126,22 @@ class ViewportWidget(QWidget):
             
         if glTextureWidget != None:
             print( "Passing Target GL Context" )
-            self.textureGLWidget.setTargetGLObject( glTextureWidget.textureGLWidget )
+            self.viewportGLWidget.setTargetGLObject( glTextureWidget.viewportGLWidget )
             
     def updateUniformValue(self,sliderList,uniform,decimalCount):
         toValue = []
         for slider in sliderList:
             toValue.append( slider.value()/(10**decimalCount) )
-        self.textureGLWidget.setUniformValue( uniform, toValue )
+        self.viewportGLWidget.setUniformValue( uniform, toValue )
         
     def grabFrameBuffer(self, withAlpha=False):
-        return self.textureGLWidget.grabFrameBuffer(withAlpha=withAlpha)
+        return self.viewportGLWidget.grabFrameBuffer(withAlpha=withAlpha)
     
     def passTargetGL( self, targetGL = None ):
         print( "Passing TargetGL To GL Viewport Object" )
         print( targetGL )
         if targetGL != None:
-            self.textureGLWidget.setTargetGLObject( targetGL )
+            self.viewportGLWidget.setTargetGLObject( targetGL )
     
 # main function
 if __name__ == '__main__':
@@ -1137,7 +1150,7 @@ if __name__ == '__main__':
  
     # app created
     app = QApplication(sys.argv)
-    w = TextureGLWidget()
+    w = ViewportGLWidget()
     w.setupUI()
     w.show()
     

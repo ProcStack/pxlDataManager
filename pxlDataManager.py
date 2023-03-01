@@ -350,17 +350,11 @@ class ImageDataProjectManager(QMainWindow):
         #    self.statusTimer.timeout.connect(self.timeoutStatus)
     def setStatusStyle(self, importance=0):
         if self.statusBar:
-            colorList = ["#353535", "#355555", "#553535"]
-            colorList = ["#99ff99", "#355555", "#553535"]
+            # Changes set by '#identifiers' in './assets/StyleSheets' css files
             toName = f"importance_{importance}"
-            print(toName)
             self.statusBar.setObjectName( toName )
             self.statusBar.style().unpolish( self.statusBar )
             self.statusBar.style().polish( self.statusBar )
-            #self.statusBar.setStyleSheet(f"""
-            #    color:{colorList[importance]};
-            #    font-weight:bold;
-            #""")
     def timeoutStatus(self):
         self.clearStatus()
         self.statusTimer.stop()
