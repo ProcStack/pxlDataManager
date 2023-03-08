@@ -224,3 +224,118 @@ def getRotationMatrix( matName="xRotMat", rotAxis="x", matSize="3x3", rotVal=-1.
             """
         
     return retMat
+    
+    
+    
+    
+# -- -- -- -- --
+# -- -- -- -- --
+# -- -- -- -- --
+
+# sRGB, Linear RGB, & CIE LAB Conversion Math
+
+
+sRGBtoLinear_verbose = """
+vec3 sRGBtoLinear(vec3 sRGB) {
+    vec3 cutoff = vec3(0.04045);
+    vec3 scale = vec3( 0.07739938080495357 ); // 1.0 / 12.92
+    vec3 a = vec3(0.055);
+    vec3 b = vec3( 0.9478672985781991 ); // 1.0 / 1.055
+    vec3 c = vec3(0.0031308);
+
+    vec3 cutoffBlender = step( cutoff, sRGB );
+    vec3 belowCutoff = sRGB * scale;
+    vec3 aboveCutoff = pow((sRGB + a) * b, vec3(2.4)) - c;
+
+    vec3 linear = mix( belowCutoff, aboveCutoff, cutoffBlender );
+    return linear;
+}
+"""
+
+sRGBtoLinear = """
+vec3 sRGBtoLinear(vec3 sRGB) {
+    vec3 belowCutoff = sRGB * 0.07739938080495357 ;
+    vec4 aboveCutoff = pow((sRGB + 0.055) * 0.9478672985781991, vec3(2.4) );
+    
+    return mix( belowCutoff, aboveCutoff, step(vec3(0.04045), sRGB) );
+}
+"""
+
+
+rgbToXYZMat3 = """
+mat3 rgbToXYZ = mat3( vec3( 0.4124  0.3576  0.1805 ),
+                      vec3( 0.2126  0.7152  0.0722 ),
+                      vec3( 0.0193  0.1192  0.9505 ) );
+"""
+
+xyzReferenceWhite = """
+vec3 labRefWhite = vec3( .95047, 1.0, 1.08883 );
+"""
+
+def convertRGBtoLAB( sRGBColorInput=True ):
+    retFunction=""
+    
+    if sRGBColorInput:
+        retFunction+=sRGBtoLinear
+    
+    retFunction+="""
+        vec3 rgbToLab( vec3 rgb ){
+        """
+    
+    if sRGBColorInput:
+        retFunction+="""
+            rgb = sRGBtoLinear( rgb );
+            """
+
+    retFunction+="""
+        rgb = sRGBtoLinear( rgb );
+        
+        // vec3 labRefWhite = vec3( .95047, 1.0, 1.08883 );
+        
+        float refX = 
+        
+        """
+        
+# Work In Progress ---
+"""
+    X / Xn = f(X)
+    Y / Yn = f(Y)
+    Z / Zn = f(Z)
+
+    L* = 116 * f(Y) - 16
+    a* = 500 * (f(X) - f(Y))
+    b* = 200 * (f(Y) - f(Z))
+Xr = X / Xw
+Yr = Y / Yw
+Zr = Z / Zw
+
+if (Yr > 0.008856) {
+L = 116 * pow(Yr, 1.0 / 3.0) - 16;
+} else {
+L = 903.3 * Yr;
+}
+
+if (Xr > 0.008856) {
+xr = pow(Xr, 1.0 / 3.0);
+} else {
+xr = (7.787 * Xr) + (16.0 / 116.0);
+}
+
+if (Yr > 0.008856) {
+yr = pow(Yr, 1.0 / 3.0);
+} else {
+yr = (7.787 * Yr) + (16.0 / 116.0);
+}
+
+if (Zr > 0.008856) {
+zr = pow(Zr, 1.0 / 3.0);
+} else {
+zr = (7.787 * Zr) + (16.0 / 116.0);
+}
+
+a_star = 500 * (xr - yr);
+b_star = 200 * (yr - zr)
+"""
+
+
+

@@ -4,16 +4,16 @@ uniforms = {
     "texOffset" : {
         "type":"vec2",
         "default":[0,0],
-        "control":"texOffset"
+        "control":"userOffset"
     },
     "texScale" : {
         "type":"vec2",
         "default":[1,1],
-        "control":"texScale"
+        "control":"userScale"
     },
     "texelSize" : {
         "type":"vec2",
-        "default":[1,1],
+        "default":[1.0/512.0]*2,
         "control":"texelSize"
     },
     "reach" : {
@@ -36,7 +36,7 @@ uniforms = {
     }
 }
 
-
+attributes = [ "position", "uv" ]
 
 vertex = '''
 

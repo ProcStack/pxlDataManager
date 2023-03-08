@@ -1006,10 +1006,12 @@ if __name__ == '__main__':
  
     settingsManager = pxlSettings.UserSettingsManager("userSettings")
     # app created
+    #QApplication.setAttribute( QtCore.Qt.AA_ShareOpenGLContexts, True )
     app = QApplication(sys.argv)
     screen = app.primaryScreen()
     screenRes = screen.size()
     userScreenRes = [ screenRes.width(), screenRes.height() ]
+    
     
     w = ImageDataProjectManager( userScreenRes, settingsManager )
     w.setupUI()

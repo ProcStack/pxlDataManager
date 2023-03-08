@@ -247,6 +247,11 @@ class ImageDataProject(QWidget):
     # -- User Interaction Helper Functions - -- --
     # -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     
+    def resize(self):
+        self.fitRawPixmapToView(True)
+        if hasattr( self, 'glTexture' ) :
+            self.glTexture.update()
+        
     def keyPressEvent(self, event):
         #print(event)
         if event.key() == QtCore.Qt.Key_Delete :
@@ -261,12 +266,16 @@ class ImageDataProject(QWidget):
             #print("Next Key")
         elif event.key() == QtCore.Qt.Key_Q:
             print( "Killing first, then Exiting" )
+            self.setStatusBar("Exiting ...", 2, False)
+            QApplication.processEvents()
             self.deleteLater()
             QApplication.quit()
         elif event.key() == QtCore.Qt.Key_Enter:
             self.proceed()
         elif event.key() == QtCore.Qt.Key_Escape:
             print( "Exiting" )
+            self.setStatusBar("Exiting ...", 2, False)
+            QApplication.processEvents()
             QApplication.quit()
         event.accept()
         
@@ -757,33 +766,44 @@ class ImageDataProject(QWidget):
         # -- -- -- -- -- -- -- -- -- -- --
         # Current GL Loaded File Layout Block
         
+        # Current Shader glEffects -
+        #  - default
+        #  - rawTexture
+        #  - colorCorrect *WIP*
+        #  - edgeDetect *WIP*
+        #  - paintMask *WIP*
+        #  - segment *WIP*
+        #  - smartBlur *WIP*
+        
         glSaveRenderPath = os.path.join( self.DataManagmentRootPath, "ViewportGLSaves" )
         
+        # Useful for managing shared resources
+        #   *WIP* Multi threaded OpenGL binding and resource management
+        self.glContextManager = ContextGL.ContextGLManager()
         
-        self.glContext = ContextGL.ContextGLManager()
-        
-        #self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContext.format(), "smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
-        self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContext.format(), "rawTexture", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
+        #self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContextManager, "smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
+        #self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContextManager, "rawTexture", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
+        self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContextManager, "segment", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glSmartBlur)
-        self.glContext.contextCreated.connect( self.glSmartBlur.setSharedGlContext )
         # -- -- --
         """
-        self.glEdgeFinding = ImageShaderGL.ImageShaderWidget(self,1, self.glContext.format(), "edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", glSaveRenderPath )
+        self.glEdgeFinding = ImageShaderGL.ImageShaderWidget(self,1, self.glContextManager, "edgeDetect", "assets/glEdgeFinder_tmp2_alpha.png", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glEdgeFinding)
-        self.glContext.contextCreated.connect( self.glEdgeFinding.setSharedGlContext )
+        self.glContextManager.contextCreated.connect( self.glEdgeFinding.setSharedGlContext )
         # -- -- --
-        self.glSegmentation = ImageShaderGL.ImageShaderWidget(self,2, self.glContext.format(), "segment", "assets/glSegmentation_tmp1_alpha.png", glSaveRenderPath )
+        self.glSegmentation = ImageShaderGL.ImageShaderWidget(self,2, self.glContextManager, "segment", "assets/glSegmentation_tmp1_alpha.png", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glSegmentation)
-        self.glContext.contextCreated.connect( self.glSegmentation.setSharedGlContext )
+        self.glContextManager.contextCreated.connect( self.glSegmentation.setSharedGlContext )
         # -- -- --
-        self.glTexture = ImageShaderGL.ImageShaderWidget(self,3, self.glContext.format(), "default", glSaveRenderPath )
+        self.glTexture = ImageShaderGL.ImageShaderWidget(self,3, self.glContextManager, "default", glSaveRenderPath )
         self.glBlockLayout.addWidget(self.glTexture)
-        self.glContext.contextCreated.connect( self.glTexture.setSharedGlContext )
+        self.glContextManager.contextCreated.connect( self.glTexture.setSharedGlContext )
         """
         #self.glSegmentation.passTargetGL( self.glTexture.textureGLWidget )
         # -- -- --
         
-        self.glBlockLayout.addWidget(self.glContext)
+        self.glBlockLayout.addWidget(self.glContextManager)
+        #self.glContextManager.checkContextState()
         
         
         # -- -- -- -- -- -- -- -- -- -- --
@@ -838,17 +858,24 @@ class ImageDataProject(QWidget):
     
         self.geometryStore = self.geometry()
         #print( self.geometryStore )
-    
-    def resize(self):
-        self.fitRawPixmapToView(True)
-        if hasattr( self, 'glTexture' ) :
-            self.glTexture.update()
         
+        # Resize first image display to max with minor delay for PyQt5 window build
+        self.resizeTimer.singleShot(100, self.fitRawPixmapToView )
         
     # -- -- -- -- -- -- -- -- -- -- -- --
     # -- UI Event Listener Functions - -- --
     # -- -- -- -- -- -- -- -- -- -- -- -- -- --
         
+    def setStatusBar( self, displayMessage = None, importance = 0, setTimeout = True ):
+        # TODO : Type conversion if 'type(displayMessage) != str'
+        # TODO : Add "Current Stack" display if 'displayMessage == None'
+        if displayMessage == None:
+            print( "Message==None passed to set window status bar" )
+            return;
+        if type(displayMessage) == str:
+            self.manager.showStatus( displayMessage, importance, setTimeout )
+        else:
+            print( displayMessage )
         
         
     @QtCore.pyqtSlot()
@@ -910,13 +937,13 @@ class ImageDataProject(QWidget):
         self.removeFileEntry(True, True, True)
         
     def loadImagePrompter(self):
-        self.manager.showStatus("Loading ImageToPrompt, may take a minute", 1, False)
+        self.setStatusBar("Loading ImageToPrompt, may take a minute", 1, False)
         from .utils import ImageToPrompt as i2p
         #self.imagePrompter = "BLIP"
         #self.imagePromptFinder = None
         modelsDir = os.path.join( self.DataManagmentRootPath, "weights" )
         self.imagePromptFinder = i2p.ImageToPrompt( modelsDir )
-        self.manager.showStatus("ImageToPrompt Loaded")
+        self.setStatusBar("ImageToPrompt Loaded")
         return
          
     @QtCore.pyqtSlot()
@@ -928,13 +955,13 @@ class ImageDataProject(QWidget):
         curWidget = self.fileList.itemWidget(curItem)
         curImageFullPath = curWidget.fullPath
         
-        self.manager.showStatus("ImageToPrompt : Finding Prompt in '"+curWidget.fileName+"'")
+        self.setStatusBar("ImageToPrompt : Finding Prompt in '"+curWidget.fileName+"'")
         foundPrompt = self.imagePromptFinder.interrogate( curImageFullPath )
         self.curFileObject.data['prompt'] = foundPrompt
         #print( curWidget.fileName )
         #print( self.manager.imageList[self.curFolderPath][curWidget.id] )
         self.updatePromptDisplay()
-        self.manager.showStatus("ImageToPrompt : "+foundPrompt, 1)
+        self.setStatusBar("ImageToPrompt : "+foundPrompt, 1)
         self.setFocus()
         
     @QtCore.pyqtSlot()
@@ -946,7 +973,7 @@ class ImageDataProject(QWidget):
         curWidget = self.fileList.itemWidget(curItem)
         curImageFullPath = curWidget.fullPath
         
-        self.manager.showStatus("ImageToPrompt : Finding Prompt in '"+curWidget.fileName+"'")
+        self.setStatusBar("ImageToPrompt : Finding Prompt in '"+curWidget.fileName+"'")
         foundPrompt = self.imagePromptFinder.interrogate( curImageFullPath )
         self.curFileObject.data['prompt'] = foundPrompt
         #print( curWidget.fileName," -- " )
@@ -954,7 +981,7 @@ class ImageDataProject(QWidget):
         #print( curWidget.fileName )
         #print( self.manager.imageList[self.curFolderPath][curWidget.id] )
         self.updatePromptDisplay()
-        self.manager.showStatus("ImageToPrompt : "+foundPrompt, 1)
+        self.setStatusBar("ImageToPrompt : "+foundPrompt, 1)
         self.setFocus()
         
     @QtCore.pyqtSlot()
@@ -978,10 +1005,10 @@ class ImageDataProject(QWidget):
     def loadFaceFinder(self):
         if self.faceFinder == None:
             #print('Loading Face Finder')
-            self.manager.showStatus("Loading FaceFinder, may take a minute", 1, False)
+            self.setStatusBar("Loading FaceFinder, may take a minute", 1, False)
             from .utils import FaceFinder as ff
             self.faceFinder = ff.FaceFinder( output = self.outputCroppedPath )
-            self.manager.showStatus("FaceFinder Loaded")
+            self.setStatusBar("FaceFinder Loaded")
         #else:
         #    print('Face Finder Already Loaded')
         self.setFocus()
@@ -998,9 +1025,9 @@ class ImageDataProject(QWidget):
         curWidget = self.fileList.itemWidget(curItem)
         self.curFileObject = curWidget
         curImageFullPath = self.curFileObject.fullPath
-        self.manager.showStatus("FaceFinder : Finding Faces in '"+curWidget.fileName+"'", 1, False)
+        self.setStatusBar("FaceFinder : Finding Faces in '"+curWidget.fileName+"'", 1, False)
         foundFacesDictList = self.faceFinder.input(curImageFullPath)
-        self.manager.showStatus("FaceFinder : Found '"+str(len(foundFacesDictList))+"' Faces")
+        self.setStatusBar("FaceFinder : Found '"+str(len(foundFacesDictList))+"' Faces")
         if len(foundFacesDictList) > 0:
             for foundFace in foundFacesDictList:
                 curAlignedFacePath = foundFace['alignedPath']

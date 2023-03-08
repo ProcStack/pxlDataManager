@@ -78,12 +78,13 @@ class UserSettingsManager():
         self.newChanges(True)
         return settingValue
         
-    
+    """
     # Create SettingsManager at a sub-class / sub-module depth
     #   Value dict persists and maintains depth level
     # TODO : Same `subDataName` names at the same depth will overwrite each other
     #          Currently, the developer should just pass unique names for duplicate nested iterations
     #            Should just pass a 'subDataName' value anyway for organization reasons
+    """
     def newSubData( self, subDataName = None ):
         if subDataName == None :
             curStack = sys._getframe(1)

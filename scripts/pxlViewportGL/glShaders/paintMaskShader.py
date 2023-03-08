@@ -5,15 +5,17 @@ uniforms = {
     "texOffset" : {
         "type":"vec2",
         "default":[0,0],
-        "control":"texOffset"
+        "control":"userOffset"
     },
     "texScale" : {
         "type":"vec2",
-        "default":[1,1],
-        "control":"texScale"
+        "default":[1.0/512.0]*2,
+        "control":"userScale"
     }
 }
 
+
+attributes = [ "position", "uv" ]
 
 
 vertex = '''

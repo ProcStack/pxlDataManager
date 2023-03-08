@@ -16,7 +16,16 @@
 #     Which most will simply be a texture location
 #       Passed from the child contexts
 #         Currently only 'ViewportGL.py'
-
+#
+#
+# Tread this Object as the Uploader and Resource Manager
+#
+# TODO : There is no check for when QtApp has Qt.AA_ShareOpenGLContexts 'True'
+#          Yet fails to return a valid global context
+#        Have seen situations where ContextGLManager never initializes
+#          Causing other ViewportGLs to never build
+#            Likely lack of Offscreen Shared Context Prep in __init__()
+#        Needs for Threading and more ViewportGL Cross Talk
 
 import sys, os
 from PIL import Image
@@ -49,9 +58,15 @@ class ContextGLManager(QtWidgets.QOpenGLWidget):
         
         # -- -- --
         
+        self.globalContext = None
+        self.globalFormat = None
         self.gl = None
         #self.context = None
         self.initialized = False
+        
+        # -- -- --
+        
+        #self.setSurfaceType(QWindow.OpenGLSurface)
         
         # -- -- --
         
@@ -70,27 +85,50 @@ class ContextGLManager(QtWidgets.QOpenGLWidget):
         
         self.curTexture = None
         
+        #print( self.context() )
+        #print( QtGui.QOpenGLContext.globalShareContext() )
+        
+        
+        #if QApplication.testAttribute(QtCore.Qt.AA_ShareOpenGLContexts):
+        #    print("Global Context Triggered")
+        
+        # Check for Global OpenGL Shared Context
+        self.checkContextState()
+            
+    def checkContextState(self):
+        print("eh?")
+        print(self.globalContext, self.globalFormat)
+        if self.globalContext and self.globalFormat :
+            return self.globalContext, self.globalFormat
+        if QApplication.testAttribute(QtCore.Qt.AA_ShareOpenGLContexts):
+            print( " Share OpenGL Context Valid on QtApp; Verifying Global Shared State " )
+            self.globalContext = QtGui.QOpenGLContext.globalShareContext()
+            if self.globalContext.isValid() :
+                print( "Valid Global Context, Propegating..." )
+                self.globalFormat = self.globalContext.format()
+                if self.globalFormat :
+                    return self.globalContext, self.globalFormat
+        # Failed to find global context
+        #   Await initializeGL for created glContext to share
+        return None,None
+                
+        
     def initializeGL(self):
+        print("Init ContextGL")
         self.gl = self.context().versionFunctions( self.profile )
         
         # -- -- --
         
-        
-        print("Pre VAO Creation")
         self.offscreenVAO = QtGui.QOpenGLVertexArrayObject( self )
         self.offscreenVAO.create()
         self.renderVAO = QtGui.QOpenGLVertexArrayObject( self )
         self.renderVAO.create()
 
-        
         # -- -- --
         
-        print("Pre Shader Load")
         self.glProgram = self.loadProgram()
         
         # -- -- --
-        
-        print("Pre VAO Build")
         
         self.glProgram.bind()
         
@@ -104,7 +142,6 @@ class ContextGLManager(QtWidgets.QOpenGLWidget):
         
         # -- -- --
             
-        print("Pre Context Emit")
         self.initialized = True
         
         self.contextCreated.emit( self.context() )
