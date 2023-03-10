@@ -1,0 +1,250 @@
+
+ -- pxlDataManager Scripting Stats - -- -- -- -- -- 
+ -- -- March 9, 2023  -- -- -- -- -- -- -- -- -- -- 
+    Stats Overview - 
+
+        Files Found - 
+             28
+        File Types Checked - 
+             MD : 5 Files
+             PY : 23 Files
+        Total Size Of Files - 
+             487.4 KB
+        Total File Line Count - 
+             12461
+
+        -- Below are Empty Lines Removed -- 
+    -- Whitespace, Quotes, and # Only Lines --
+
+        Code Line Count - 
+             6493
+        Comments In Code Line Count - 
+             3151
+        Documentation File Info Line Count  - 
+             430
+
+ -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+
+
+  01; Code - 
+    /scripts/utils/UserSettingsManager.py
+     - File Size - 5.063 KB
+     - Total Line Count - 135
+     - Code Line Count - 88
+     - Commented Line Count - 20
+
+
+  02; Documentation - 
+    /scripts/utils/README.md
+     - File Size - 1.291 KB
+     - Total Line Count - 38
+     - Information Line Count - 27
+
+
+  03; Code - 
+    /scripts/utils/ImageToPrompt.py
+     - File Size - 7.672 KB
+     - Total Line Count - 210
+     - Code Line Count - 109
+     - Commented Line Count - 53
+
+
+  04; Code - 
+    /scripts/utils/FaceFinder.py
+     - File Size - 3.094 KB
+     - Total Line Count - 83
+     - Code Line Count - 50
+     - Commented Line Count - 14
+
+
+  05; Code - 
+    /scripts/utils/ControlNetGenerator.py
+     - File Size - 60 B
+     - Total Line Count - 4
+     - Code Line Count - 3
+     - Commented Line Count - 0
+
+
+  06; Code - 
+    /scripts/pxlViewportGL/glShaders/swapTextureShader.py
+     - File Size - 1.072 KB
+     - Total Line Count - 57
+     - Code Line Count - 28
+     - Commented Line Count - 27
+
+
+  07; Code - 
+    /scripts/pxlViewportGL/glShaders/smartBlurShader.py
+     - File Size - 3.807 KB
+     - Total Line Count - 159
+     - Code Line Count - 119
+     - Commented Line Count - 82
+
+
+  08; Code - 
+    /scripts/pxlViewportGL/glShaders/shaderUtils.py
+     - File Size - 3.495 KB
+     - Total Line Count - 97
+     - Code Line Count - 22
+     - Commented Line Count - 66
+
+
+  09; Code - 
+    /scripts/pxlViewportGL/glShaders/shaderMath.py
+     - File Size - 7.708 KB
+     - Total Line Count - 342
+     - Code Line Count - 56
+     - Commented Line Count - 185
+
+
+  10; Code - 
+    /scripts/pxlViewportGL/glShaders/segmentShader.py
+     - File Size - 12.76 KB
+     - Total Line Count - 451
+     - Code Line Count - 115
+     - Commented Line Count - 247
+
+
+  11; Code - 
+    /scripts/pxlViewportGL/glShaders/rawTextureShader.py
+     - File Size - 1.012 KB
+     - Total Line Count - 61
+     - Code Line Count - 43
+     - Commented Line Count - 24
+
+
+  12; Code - 
+    /scripts/pxlViewportGL/glShaders/paintMaskShader.py
+     - File Size - 1.181 KB
+     - Total Line Count - 67
+     - Code Line Count - 47
+     - Commented Line Count - 26
+
+
+  13; Code - 
+    /scripts/pxlViewportGL/glShaders/edgeDetectShader.py
+     - File Size - 5.899 KB
+     - Total Line Count - 206
+     - Code Line Count - 152
+     - Commented Line Count - 109
+
+
+  14; Code - 
+    /scripts/pxlViewportGL/glShaders/defaultShader.py
+     - File Size - 423 B
+     - Total Line Count - 35
+     - Code Line Count - 22
+     - Commented Line Count - 14
+
+
+  15; Code - 
+    /scripts/pxlViewportGL/glShaders/colorCorrectShader.py
+     - File Size - 1008 B
+     - Total Line Count - 61
+     - Code Line Count - 43
+     - Commented Line Count - 23
+
+
+  16; Documentation - 
+    /scripts/pxlViewportGL/glShaders/README.md
+     - File Size - 14.84 KB
+     - Total Line Count - 298
+     - Information Line Count - 256
+
+
+  17; Code - 
+    /scripts/pxlViewportGL/ViewportGL.py
+     - File Size - 45.30 KB
+     - Total Line Count - 1162
+     - Code Line Count - 613
+     - Commented Line Count - 265
+
+
+  18; Documentation - 
+    /scripts/pxlViewportGL/README.md
+     - File Size - 970 B
+     - Total Line Count - 31
+     - Information Line Count - 26
+
+
+  19; Code - 
+    /scripts/pxlViewportGL/ImageShaderGL.py
+     - File Size - 110.4 KB
+     - Total Line Count - 2584
+     - Code Line Count - 1107
+     - Commented Line Count - 851
+
+
+  20; Code - 
+    /scripts/pxlViewportGL/ContextGL.py
+     - File Size - 7.175 KB
+     - Total Line Count - 220
+     - Code Line Count - 88
+     - Commented Line Count - 66
+
+
+  21; Code - 
+    /scripts/pxlDataProject.py
+     - File Size - 62.22 KB
+     - Total Line Count - 1506
+     - Code Line Count - 922
+     - Commented Line Count - 289
+
+
+  22; Code - 
+    /scripts/preDev/pxlViewportWindow.py
+     - File Size - 168 B
+     - Total Line Count - 3
+     - Code Line Count - 0
+     - Commented Line Count - 3
+
+
+  23; Code - 
+    /scripts/preDev/pxlImageEditor.py
+     - File Size - 174 B
+     - Total Line Count - 3
+     - Code Line Count - 0
+     - Commented Line Count - 3
+
+
+  24; Code - 
+    /scripts/TrainingLabelGenerator.py
+     - File Size - 55.99 KB
+     - Total Line Count - 1415
+     - Code Line Count - 935
+     - Commented Line Count - 224
+
+
+  25; Documentation - 
+    /scripts/README.md
+     - File Size - 358 B
+     - Total Line Count - 17
+     - Information Line Count - 8
+
+
+  26; Code - 
+    /scripts/FileIngester.py
+     - File Size - 84.67 KB
+     - Total Line Count - 2041
+     - Code Line Count - 1380
+     - Commented Line Count - 317
+
+
+  27; Code - 
+    /pxlDataManager.py
+     - File Size - 39.85 KB
+     - Total Line Count - 1025
+     - Code Line Count - 551
+     - Commented Line Count - 243
+
+
+  28; Documentation - 
+    /README.md
+     - File Size - 9.848 KB
+     - Total Line Count - 150
+     - Information Line Count - 113
+
+
+
+ -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+

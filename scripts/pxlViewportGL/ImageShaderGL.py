@@ -1,5 +1,41 @@
-
+# pxlViewportGL; ImagerShaderGL v0.3
+#   PyQt5 Dynamic Image Processing OpenGL Shader Pipeline
+#     By Kevin Edzenga
+#          gh - ProcStack
+#     As of March 9th, 2023
+#
+# -- -- -- -- -- -- -- -- -- -- -- -- --
+#
 # Built on Python 3.10.6 && PyQt5 5.15.9
+#
+# -- -- -- -- -- -- -- -- -- -- -- -- --
+#
+# Currently Supports -
+#   Dynamically generated OpenGL needs for custom written shaders in './glShaders'
+#   Texture Image loading/changing for Sampler Uniforms in Render Passes
+#   Different existing OpenGL shader math & utility functions
+#     Such as color space swapping and bluring functions
+#       See - './glShaders/shaderMath.py' & './glShaders/shaderUtils.py'
+#   'FBO', 'FBO Swap', & 'To-Screen' Render Passes
+#     'FBO' & 'FBO Swap' texture outputs can be used as Sampler Uniforms
+#       Simply set the Unform's type to the render pass' name
+#       To read the pass's prior output in itself,
+#         You must use 'FBO Swap' as an intermediate for now
+#
+#
+# Not Supported -
+#   Texture swapping between "double buffers"
+#     Soon to add single FBO A<>B Texture Swapping
+#       For now, 'FBO Swap' is used to avoid using `glReadPixels()` functions
+#         As `glReadPixels()` can be relatively slow
+#   Multiple 'glEffect' shaders
+#     Soon 'glEffect' will support Shader Lists [] for custom multi-shader pipelines
+#       For now, custom shaders for 'FBO', 'FBO Swap, & 'To-Screen' can be written
+#         Simple set a Shader Uniform's Type to the prior pass's name
+#
+# For more shader information,
+#   Please see - `./glShaders/README.md`
+
 
 import sys, os, importlib
 from PIL import Image
@@ -133,6 +169,13 @@ PVGL_ModuleName = os.path.basename( __file__ ).split(".")[0]
 #          Perhaps setting a {blend function} for updating the value per builtin dict entry
 #            Bypassing 'self.lerpBuiltinUniformValues()'; see 'self.updateBuiltinUniformValues()' for now
 # TODO : Investigate 'context.makeCurrent( QSurface )' and 'context.doneCurrent()' need with a shared GL Context
+# TODO : Implement Rebuild Shader
+#          For Uniform Array Length Changes
+#            eg; 'segmentShader.py' --
+#              #define SEGMENT_SEED_COUNT # 
+#              uniform vec3 segmentSeeds[ ** SEGMENT_SEED_COUNT ** ];
+# TODO : Implement Reload Shader File Rebuild
+
 
 #class TextureGLWidget(QtWidgets.QOpenGLWidget):
 class TextureGLWidget(QtGui.QOpenGLWindow):
@@ -1171,8 +1214,13 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 #   While other render passes,
                 #     Default behaviour is to bind the pass's output to a sampler
                 
-                sourcePassType = self.renderPassNames[uSettings['type']]
+                sourcePassType = self.renderPassNames[ uSettings['type'] ]
+                sourcePassFBO = glProgramDataDict[ sourcePassType ]['fboObject']
                 sourcePassTexture = glProgramDataDict[ sourcePassType ]['fboTexture']
+                
+                print( uSettings['type'] )
+                print( sourcePassType )
+                print( glProgramDataDict[ sourcePassType ] )
                 
                 #samplerUniformIndex += 1
                 #glProgram.setUniformValue( curUniform, sourcePassTexture.textureId() )
@@ -1184,24 +1232,25 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 uLocation = glProgram.uniformLocation( curUniform )
                 
                 # -- -- --
-                print(glProgramData)
+                
                 glTexLocation = self.gl.GL_TEXTURE0 + uLocation
                 self.gl.glActiveTexture( glTexLocation )
                 #glProgramData['fboObject'].bind()
-                self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, glProgramData['fboObject'].texture())
+                self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, sourcePassFBO.texture())
                 #curTextureLoad['texture'].bind( samplerUniformIndex )
                 
                 glProgram.setUniformValue( curUniform, glTexLocation )
                 
                 #curTextureLoad['texture'].release()
                 
+                self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, 0)
                 self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
                 
                 # -- -- --
                 
                 curSamplerDict = self.glPassSamplerDict.copy()
                 curSamplerDict['type'] = uSettings['type']
-                curSamplerDict['location'] = glProgram.uniformLocation( curUniform )
+                curSamplerDict['location'] = uLocation
                 curSamplerDict['texture'] = sourcePassTexture
                 glProgramData['samplers'][ curUniform ] = curSamplerDict
                 
@@ -2453,7 +2502,7 @@ class ImageShaderWidget(QWidget):
             if "[]" in uData['type']:
                 continue;
             
-            valList = [uData['value']] if type(uData['value']) == float else uData['value']
+            valList = [uData['value']] if type(uData['value']) in [float,int] else uData['value']
             valLimits = uData['range']
             multVal = max(list(map(lambda x: len(str(x)) if "." in str(x) else 1, valLimits)))
             sliderList = []

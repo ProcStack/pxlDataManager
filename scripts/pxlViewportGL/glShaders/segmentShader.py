@@ -60,8 +60,9 @@ def seedDictToArray( seedDict ):
     outMat = [ [float(seedDict['region']),   seedDict['weight'],   0.0 ], 
                [seedDict['color'][0], seedDict['color'][1], seedDict['color'][2]],
                [seedDict['pos'][0],   seedDict['pos'][1],   0.0 ] ]
-               
     return outMat
+    
+    
 
 # Defualt OpenGL Array Run Size
 #   Can't be larger than 6 seeded regions withough rebuilding Shader
@@ -72,6 +73,24 @@ segmentSeedDictList.append( newSeedDict(2, 1.0, [.75,.25]) )
 segmentSeedDictList.append( newSeedDict(3, 0.0, [.25,.25]) )
 segmentSeedDictList.append( newSeedDict(4, 0.0, [.75,.75]) )
 segmentSeedDictList.append( newSeedDict(5, 0.0, [.25,.5]) )
+
+
+# -- -- --
+
+# Max Seed Count Read Array
+#   uniform vec3 segmentSeeds[#} = Region,Color,Pos, Region,Color,Pos, .....
+# TODO : Add support for dynamic User Defined Region Positions
+
+# Run = [ vec3(Region), vec3(Color), vec3(Position) ]
+#   Size of len(Run) x Vec3()
+segSeedRun = 3
+segSeedRunString = str(segSeedRun)
+
+segSeedCount = len(segmentSeedDictList)
+# Existing Default Seed List Size * Run Size
+segSeedUniformSize = str( segSeedCount * segSeedRun )
+
+
 
 # -- -- --
 # -- -- --
@@ -123,6 +142,12 @@ fboUniforms = {
         "default":segmentSeedDictList,
         "control":"visible"
     },
+    "selectedSegment" : {
+        "type":"int",
+        "default":0,
+        "control":"visible",
+        "range":[0,1]
+    },
     "isFBO" : {
         "type":"float",
         "default":0.0,
@@ -155,19 +180,6 @@ fboVertex = '''
     }
 '''
 
-# -- -- --
-
-# Max Seed Count Read Array
-#   uniform vec3 segmentSeeds[#} = Region,Color,Pos, Region,Color,Pos, .....
-# TODO : Add dynamic User Defined Region Positions
-#
-# Run = [ vec3(Region), vec3(Color), vec3(Position) ]
-#   Size of 3 x Vec3()
-segSeedRun = '3'
-# Existing Default Seed List Size * Run Size
-segSeedCount = str( len(segmentSeedDictList) * 3 )
-
-# -- -- --
 
 
 # -- -- -- -- -- -- --
@@ -190,7 +202,7 @@ segSeedCount = str( len(segmentSeedDictList) * 3 )
 fboFragment = '''
     #version 330
     
-    #define SEGMENT_SEED_COUNT ''' + segSeedCount + ''' 
+    #define SEGMENT_SEED_COUNT ''' + segSeedUniformSize + ''' 
 
     uniform sampler2D samplerTex;
     uniform sampler2D bufferRefTex;
@@ -200,7 +212,7 @@ fboFragment = '''
     uniform vec2 mousePos;
     uniform float seedDist;
     uniform float isFBO;
-    uniform vec3 segmentSeeds[''' + segSeedCount + '''];
+    uniform vec3 segmentSeeds[''' + segSeedUniformSize + '''];
     
     in vec2 vUv;
 
@@ -241,7 +253,7 @@ fboFragment = '''
         float curSeedWeight;
         float foundSeed = dataCd.a;
         vec3 minDistSeedColor = mix( vec3(0.0), dataCd.rgb, foundSeed );
-        for( x=0; x<SEGMENT_SEED_COUNT; x=x+'''+segSeedRun+'''){
+        for( x=0; x<SEGMENT_SEED_COUNT; x=x+'''+segSeedRunString+'''){
             vec2 curRegionWeight = segmentSeeds[ x + REGION_WEIGHT ].xy;
             vec2 curSeedPos = segmentSeeds[ x + SEED_POSITION ].xy;
             vec3 curSeedColor = segmentSeeds[ x + SEED_COLOR ];
@@ -304,7 +316,7 @@ fboFragment = '''
 fboFragment = '''
     #version 330
     
-    #define SEGMENT_SEED_COUNT ''' + segSeedCount + ''' 
+    #define SEGMENT_SEED_COUNT ''' + segSeedUniformSize + ''' 
 
     uniform sampler2D samplerTex;
     uniform sampler2D bufferRefTex;
@@ -314,7 +326,8 @@ fboFragment = '''
     uniform vec2 mousePos;
     uniform float seedDist;
     uniform float isFBO;
-    uniform vec3 segmentSeeds[''' + segSeedCount + '''];
+    uniform vec3 segmentSeeds[''' + segSeedUniformSize + '''];
+    uniform int selectedSegment;
     
     in vec2 vUv;
 
@@ -355,7 +368,7 @@ fboFragment = '''
         float curSeedWeight;
         float foundSeed = 0.0;//dataCd.a;
         vec3 minDistSeedColor = mix( vec3(0.0), dataCd.rgb, foundSeed );
-        for( x=0; x<SEGMENT_SEED_COUNT; x=x+'''+segSeedRun+'''){
+        for( x=0; x<SEGMENT_SEED_COUNT; x=x+'''+segSeedRunString+'''){
             vec2 curRegionWeight = segmentSeeds[ x + REGION_WEIGHT ].xy;
             vec2 curSeedPos = segmentSeeds[ x + SEED_POSITION ].xy;
             vec3 curSeedColor = segmentSeeds[ x + SEED_COLOR ];
@@ -376,12 +389,17 @@ fboFragment = '''
         //outCd.rg=vUv;
         //outCd = mix( outCd, texture( bufferRefTex, scaledUv ), vUv.x) ;
 
+
+
         outCd += dataCd*.01;
         outCd.r = fract( outCd.r );
         outCd.g = fract( outCd.g );
         outCd.b = fract( outCd.b );
         outCd.a = 1.0;
         //outCd = mix( outCd, texture( samplerTex, scaledUv ), 1.0) ;
+
+        float sDist = 1.0 - min(1.0, length( vUv - segmentSeeds[ selectedSegment + SEED_POSITION ].xy )*10.0);
+        outCd.rgb = mix( outCd.rgb, segmentSeeds[ selectedSegment * '''+segSeedRunString+''' + SEED_COLOR ], sDist);
 
         outColor = outCd;
     }
@@ -416,8 +434,6 @@ vertex = '''
 fragment = '''
     #version 330
     
-    #define SEGMENT_SEED_COUNT ''' + segSeedCount + ''' 
-
     uniform sampler2D samplerTex;
     uniform sampler2D bufferRefTex;
     
