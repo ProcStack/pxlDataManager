@@ -27,8 +27,15 @@
 import os, sys
 from random import random
     
-from .shaderUtils import getBoxSamples
-from .shaderMath import clamp01
+
+# Add local script directory to Module Paths
+ShaderGLAbsPath = os.path.abspath( __file__ )
+ShaderGLAbsScriptDir = os.path.dirname( ShaderGLAbsPath )
+if ShaderGLAbsScriptDir not in sys.path:
+    sys.path.insert( 0, ShaderGLAbsScriptDir )
+    
+from shaderUtils import getBoxSamples
+from shaderMath import clamp01
 
 # -- -- --
 # -- -- --
@@ -91,7 +98,6 @@ segSeedCount = len(segmentSeedDictList)
 segSeedUniformSize = str( segSeedCount * segSeedRun )
 
 
-
 # -- -- --
 # -- -- --
 # -- -- --
@@ -101,7 +107,8 @@ settings = {
     "fboShader" : True,
     "hasSim" : True,
     "simTimerIterval" : 100,
-    "simRunCount" : 10
+    "simRunCount" : 10,
+    "renderOrder" : ['fbo','fboSwap','toScreen']
 }
 
 # -- -- --
@@ -385,7 +392,7 @@ fboFragment = '''
             // disToSeed = min( disToSeed, curDisToSeed) ;
         }
         
-        outCd = vec4( minDistSeedColor, 1.0 );
+        vec4 outData = vec4( minDistSeedColor, 1.0 );
         //outCd.rg=vUv;
         //outCd = mix( outCd, texture( bufferRefTex, scaledUv ), vUv.x) ;
 
@@ -399,6 +406,7 @@ fboFragment = '''
         //outCd = mix( outCd, texture( samplerTex, scaledUv ), 1.0) ;
 
         float sDist = 1.0 - min(1.0, length( vUv - segmentSeeds[ selectedSegment + SEED_POSITION ].xy )*10.0);
+        outCd.rgb = mix( outCd.rgb, outData.rgb, step(.1, vUv.x) );
         outCd.rgb = mix( outCd.rgb, segmentSeeds[ selectedSegment * '''+segSeedRunString+''' + SEED_COLOR ], sDist);
 
         outColor = outCd;

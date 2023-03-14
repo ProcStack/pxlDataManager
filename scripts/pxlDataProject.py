@@ -15,7 +15,7 @@ from PyQt5.uic import *
 #from basicsr.utils import imwrite
 
 from .utils import UserSettingsManager as pxlSettings
-from .pxlViewportGL import ContextGL, ImageShaderGL
+from .pxlViewportGL import LoggerGL, ContextGL, ImageShaderGL, ViewportGL
 #from .pxlViewportGL import ContextGL, ImageShaderGL, ViewportGL
 
 
@@ -379,7 +379,7 @@ class ImageDataProject(QWidget):
         
         # Lower Shelf, Block 3 & 4
         self.lowShelfWidget = QWidget()
-        self.lowShelfWidget.setFixedHeight(512)
+        self.lowShelfWidget.setFixedHeight(542)
         lowShelfLayout = QHBoxLayout()
         lowShelfLayout.setAlignment(QtCore.Qt.AlignCenter)
         lowShelfLayout.setContentsMargins(0,0,0,0)
@@ -784,6 +784,9 @@ class ImageDataProject(QWidget):
         #self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContextManager, "smartBlur", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
         #self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContextManager, "rawTexture", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
         self.glSmartBlur = ImageShaderGL.ImageShaderWidget(self,0, self.glContextManager, "segment", "assets/glEdgeFinder_tmp1_alpha.png", glSaveRenderPath )
+        
+        #self.glSmartBlur.setAttr( logLevel="" glDebugger=True, 
+        
         self.glBlockLayout.addWidget(self.glSmartBlur)
         # -- -- --
         """

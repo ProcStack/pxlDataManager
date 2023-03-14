@@ -144,6 +144,16 @@ These python scripts were written on Windows, with SOME potential OS issues miti
 <br>&nbsp;&nbsp;Which may be better for cross platform usage anyway, as there is no `glutInit()` on Windows PyOpenGL
 <br>&nbsp;&nbsp;&nbsp;&nbsp;*Testing will be needed on Linux / MacOS.  But I don't have a Linux machine strong enough to test these tools.*
 <br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*Pull Requests are welcomed!*
+
+Any Image Shader pxlViewportGL objects are deep in development!
+<br/>&nbsp;&nbsp;With that in mind, there is little to no VRAM memory management,
+<br/>&nbsp;&nbsp;&nbsp;&nbsp;Asside for default PyQt5 behaviour.
+<br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;This is actively being developed, but must be stated.
+<br/>&nbsp;&nbsp;Most all other AI models loaded are cleaned up properly, to be verified though.
+<br/>&nbsp;&nbsp;Any PyQt Object Memory Management are left to default behaviour.
+
+
+
 <br/>
 <br/>
 

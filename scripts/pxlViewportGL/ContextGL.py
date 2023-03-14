@@ -48,6 +48,7 @@ from PyQt5.uic import *
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 
 
+
 class ContextGLManager(QtWidgets.QOpenGLWidget):
 #class TextureGLWidget(QtOpenGL.QGLWidget):
     contextCreated = QtCore.pyqtSignal( QtGui.QOpenGLContext )

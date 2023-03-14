@@ -443,6 +443,7 @@ class ImageDataProjectManager(QMainWindow):
         # -- -- --
         
         tlabel = QLabel('Load Project - ', self)
+        tlabel.setFont(QtGui.QFont("Tahoma",11))
         tlabel.setAlignment(QtCore.Qt.AlignLeft)
         loadProjectBlockLayout.addWidget(tlabel)
         
@@ -450,11 +451,6 @@ class ImageDataProjectManager(QMainWindow):
         
         
         # Found Projects List
-        
-        tlabel = QLabel('-- Found Project List --', self)
-        tlabel.setAlignment(QtCore.Qt.AlignCenter)
-        loadProjectBlockLayout.addWidget(tlabel)
-        # -- -- --
         self.foundProjectsList = QListWidget()
         self.foundProjectsList.itemSelectionChanged.connect( self.foundProjectsList_onSelectionChanged )
         self.foundProjectsList.itemDoubleClicked.connect( self.foundProjectsList_onItemDoubleClick )
@@ -506,7 +502,7 @@ class ImageDataProjectManager(QMainWindow):
         # -- -- --
         curSelectedProjectWidget = QWidget()
         curSelectedProjectLayout = QHBoxLayout()
-        curSelectedProjectLayout.setAlignment(QtCore.Qt.AlignCenter)
+        curSelectedProjectLayout.setAlignment(QtCore.Qt.AlignCenter | QtCore.Qt.AlignTop)
         curSelectedProjectLayout.setContentsMargins(0,0,0,0)
         curSelectedProjectLayout.setSpacing(1)
         curSelectedProjectWidget.setLayout(curSelectedProjectLayout)
@@ -514,29 +510,52 @@ class ImageDataProjectManager(QMainWindow):
         # -- -- --
         curProjectHeaderText = QLabel('Current Selected Project --', self)
         curProjectHeaderText.setFont(QtGui.QFont("Tahoma",9))
-        loadProjectBlockLayout.addWidget(curProjectHeaderText)
+        curSelectedProjectLayout.addWidget(curProjectHeaderText)
         # -- -- --
         self.curSelectedProjectText = QLabel('', self)
         self.curSelectedProjectText.setText( self.projectName )
         self.curSelectedProjectText.setFont(QtGui.QFont("Tahoma",14))
         self.curSelectedProjectText.setContentsMargins(20,0,0,0)
-        loadProjectBlockLayout.addWidget(self.curSelectedProjectText)
+        curSelectedProjectLayout.addWidget(self.curSelectedProjectText)
+        
+        curSelectedProjectLayout.addStretch(1)
         # -- -- --
+        self.loadButton = QPushButton('Load Project', self)
+        self.loadButton.setToolTip('Load selected project')
+        self.loadButton.setFont(QtGui.QFont("Tahoma",11))
+        self.loadButton.clicked.connect(self.loadButton_onClick)
+        curSelectedProjectLayout.addWidget(self.loadButton)
+        # -- -- --
+        
+        
+        vSpacer = QSpacerItem(10, 20, QSizePolicy.Minimum, QSizePolicy.Minimum)
+        loadProjectBlockLayout.addItem(vSpacer)
+        
+        # -- -- --
+        
         scanDirBlockWidget = QWidget()
         self.scanDirBlockLayout = QHBoxLayout()
-        self.scanDirBlockLayout.setAlignment(QtCore.Qt.AlignCenter)
-        self.scanDirBlockLayout.setContentsMargins(0,3,0,3)
-        self.scanDirBlockLayout.setSpacing(1)
+        self.scanDirBlockLayout.setAlignment(QtCore.Qt.AlignLeft)
+        self.scanDirBlockLayout.setContentsMargins(0,0,0,0)
+        self.scanDirBlockLayout.setSpacing(0)
         scanDirBlockWidget.setLayout(self.scanDirBlockLayout)
-        
         loadProjectBlockLayout.addWidget(scanDirBlockWidget)
         # -- -- --
-        self.scanDirBlockLayout.addStretch(1)
+        vSpacer = QSpacerItem(10, 10, QSizePolicy.Minimum, QSizePolicy.Minimum)
+        loadProjectBlockLayout.addItem(vSpacer)
+        
         # -- -- --
-        self.verifyImagesButton = QPushButton('Verify Images', self)
-        self.verifyImagesButton.setToolTip('Verify images stored in the project still exist')
+        vSpacer = QSpacerItem(10, 10, QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.scanDirBlockLayout.addItem(vSpacer)
+        # -- -- --
+        self.verifyImagesButton = QPushButton('Verify Images On Disk', self)
+        self.verifyImagesButton.setFont(QtGui.QFont("Tahoma",9))
+        self.verifyImagesButton.setToolTip('Verify project image & file paths still exist on disk')
         self.verifyImagesButton.clicked.connect(self.verifyImagesButton_onClick)
         self.scanDirBlockLayout.addWidget(self.verifyImagesButton)
+        # -- -- --
+        vSpacer = QSpacerItem(10, 10, QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.scanDirBlockLayout.addItem(vSpacer)
         # -- -- --
         self.scanDirBlockLayout.addStretch(1)
         # -- -- --
@@ -549,17 +568,17 @@ class ImageDataProjectManager(QMainWindow):
         self.scanDirBlockLayout.addStretch(1)
         """
         # -- -- --
-        self.cullEmptyFoldersButton = QPushButton('Cull Empty Folders', self)
-        self.cullEmptyFoldersButton.setToolTip(' - Remove empty project known image folders\n - Remove folders only containing folders,\n    No empty folder listings in Project View')
-        self.cullEmptyFoldersButton.clicked.connect(self.cullEmptyFoldersButton_onClick)
-        self.scanDirBlockLayout.addWidget(self.cullEmptyFoldersButton)
+        # self.cullEmptyFoldersButton = QPushButton('Cull Empty Folders', self)
+        # self.cullEmptyFoldersButton.setToolTip(' - Remove empty folders from project listing. \n - Remove folders only containing folders,\n    No empty folder listings in Project View\n    (From Project Listing)')
+        # self.cullEmptyFoldersButton.clicked.connect(self.cullEmptyFoldersButton_onClick)
+        # self.scanDirBlockLayout.addWidget(self.cullEmptyFoldersButton)
         # -- -- --
         self.scanDirBlockLayout.addStretch(1)
         # -- -- --
-        self.loadButton = QPushButton('Load Selected Project', self)
-        self.loadButton.setToolTip('Load selected project')
-        self.loadButton.clicked.connect(self.loadButton_onClick)
-        self.scanDirBlockLayout.addWidget(self.loadButton)
+        # self.loadButton = QPushButton('Load Selected Project', self)
+        # self.loadButton.setToolTip('Load selected project')
+        # self.loadButton.clicked.connect(self.loadButton_onClick)
+        # self.scanDirBlockLayout.addWidget(self.loadButton)
         # -- -- --
         self.scanDirBlockLayout.addStretch(1)
         # -- -- --
@@ -578,6 +597,13 @@ class ImageDataProjectManager(QMainWindow):
         line.setStyleSheet("background-color:#808080;")
         loadProjectBlockLayout.addWidget(line)
         
+        line = QLabel('', self)
+        line.setFont(QtGui.QFont("Tahoma",1))
+        line.resize( 300, 1 )
+        #line.setStyleSheet("border: 1px solid black;")
+        line.setStyleSheet("background-color:#808080;")
+        loadProjectBlockLayout.addWidget(line)
+        
         vSpacer = QSpacerItem(10, 20, QSizePolicy.Minimum, QSizePolicy.Minimum)
         loadProjectBlockLayout.addItem(vSpacer)
         
@@ -585,6 +611,7 @@ class ImageDataProjectManager(QMainWindow):
         # -- -- --
         
         tlabel = QLabel('New Project - ', self)
+        tlabel.setFont(QtGui.QFont("Tahoma",11))
         tlabel.setAlignment(QtCore.Qt.AlignLeft)
         loadProjectBlockLayout.addWidget(tlabel)
         
@@ -609,12 +636,13 @@ class ImageDataProjectManager(QMainWindow):
         scanDirBlockWidget = QWidget()
         self.scanDirBlockLayout = QHBoxLayout()
         self.scanDirBlockLayout.setAlignment(QtCore.Qt.AlignCenter)
-        self.scanDirBlockLayout.setContentsMargins(0,0,0,0)
-        self.scanDirBlockLayout.setSpacing(1)
+        self.scanDirBlockLayout.setContentsMargins(2,2,2,2)
+        self.scanDirBlockLayout.setSpacing(5)
         scanDirBlockWidget.setLayout(self.scanDirBlockLayout)
         loadProjectBlockLayout.addWidget(scanDirBlockWidget)
         # -- -- --
         self.loadScanDirButton = QPushButton('Sources Folder', self)
+        self.loadScanDirButton.setFont(QtGui.QFont("Tahoma",10))
         self.loadScanDirButton.setToolTip('Locate Folder to Scan for Images')
         self.loadScanDirButton.clicked.connect(self.loadScanDirButton_onClick)
         self.scanDirBlockLayout.addWidget(self.loadScanDirButton)
@@ -628,6 +656,7 @@ class ImageDataProjectManager(QMainWindow):
         self.scanDirBlockLayout.addItem(hSpacer)
         # -- -- --
         self.scanDirButton = QPushButton('Scan', self)
+        self.scanDirButton.setFont(QtGui.QFont("Tahoma",10))
         self.scanDirButton.setToolTip('Regressively search through folder for Images')
         self.scanDirButton.clicked.connect(self.scanDirButton_onClick)
         self.scanDirBlockLayout.addWidget(self.scanDirButton)
@@ -672,7 +701,8 @@ class ImageDataProjectManager(QMainWindow):
         # -- -- --
         
         
-        self.newProjectButton = QPushButton('Save & Open New Project', self)
+        self.newProjectButton = QPushButton('Save and Open New Project', self)
+        self.newProjectButton.setFont(QtGui.QFont("Tahoma",9))
         self.newProjectButton.setToolTip('Save scanned directory images as new project')
         self.newProjectButton.clicked.connect(self.newProjectButton_onClick)
         loadProjectBlockLayout.addWidget(self.newProjectButton)
@@ -996,7 +1026,10 @@ class ImageDataProjectManager(QMainWindow):
             self.projectWidget.resize()
         #QtCore.QMainWindow.resizeEvent(self, event)
         
-        
+    def destroyEvent(self, event):
+
+        print("DESTROY!")
+        pass;
 
 
 # main function

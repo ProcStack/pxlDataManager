@@ -41,6 +41,7 @@ import sys, os, importlib
 from PIL import Image
 from functools import partial
 import math
+import time
 
 import ctypes
 import numpy as np
@@ -52,7 +53,20 @@ from PyQt5 import QtWidgets
 from PyQt5.QtWidgets import *
 from PyQt5.uic import *
 
-PVGL_ModuleName = os.path.basename( __file__ ).split(".")[0]
+
+# Add local script directory to Module Paths
+ImageShaderGLAbsPath = os.path.abspath( __file__ )
+ImageShaderGLScriptDir = os.path.dirname( ImageShaderGLAbsPath )
+if ImageShaderGLScriptDir not in sys.path:
+    sys.path.insert( 0, ImageShaderGLScriptDir )
+
+
+
+from LoggerGL import VerboseLevelEnum, PrintTimeEnum, LogManager
+
+
+
+
 
 
 # -- -- -- -- -- -- -- -- -- -- -- -- --
@@ -148,6 +162,15 @@ PVGL_ModuleName = os.path.basename( __file__ ).split(".")[0]
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 # -- -- -- -- -- -- -- -- -- -- -- -- --
 
+# Major TODOs --
+#
+# TODO : As far as I can tell, GPU objects remain in memory after App closes
+#          Methodology is known, implementation in progress!
+#
+# -- -- --
+#
+# Minor TODOs --
+#
 # TODO : Currently not utilizing swap buffers, opting for individual buffers
 #          The primary GLWindow should use swap buffers for grabbing reasons
 #            Don't want to restrict FBO renders, but would be helpful for sims
@@ -156,7 +179,7 @@ PVGL_ModuleName = os.path.basename( __file__ ).split(".")[0]
 #          Makes it more similar to other graphics programs for workflow
 #            Also allows for easy toggling at a GUI level, just don't render the pass
 #          This should make use of swapping buffers though
-# TODO : Store per shader visual control values from {'current image' path : [Render Passes] } ???
+# TODO : Store UserSettings per shader visual control values from {'current image' path : [Render Passes] } ???
 #          Might get a bit messy, but easier "jump back in" to prior settings per-image
 # TODO : With binds and releases, updating a later pass in the render order, to only render from that pass on?
 #          Data retains on gpu, but have seen odd results from 'toScreen' renders requiring re-rendering before usage
@@ -165,9 +188,10 @@ PVGL_ModuleName = os.path.basename( __file__ ).split(".")[0]
 #            But for future capacity, would be useful
 # TODO : Test if [*array] is fast into 2 arrays than for-in and setting individual elements....
 #          Typing it out sounds like [*array} would be faster
-# TODO : Make higher level Builtin Uniforms Blending Values, as there is a lot of checks for needless functionality currently
-#          Perhaps setting a {blend function} for updating the value per builtin dict entry
-#            Bypassing 'self.lerpBuiltinUniformValues()'; see 'self.updateBuiltinUniformValues()' for now
+# TODO : Make higher level Builtin Uniforms Blending Values,
+#          As there is a lot of checks for needless functionality currently
+#          Perhaps setting a {blend function} in the uniform dict itself
+#          Bypassing 'self.lerpBuiltinUniformValues()'; see 'self.updateBuiltinUniformValues()' for now
 # TODO : Investigate 'context.makeCurrent( QSurface )' and 'context.doneCurrent()' need with a shared GL Context
 # TODO : Implement Rebuild Shader
 #          For Uniform Array Length Changes
@@ -175,48 +199,82 @@ PVGL_ModuleName = os.path.basename( __file__ ).split(".")[0]
 #              #define SEGMENT_SEED_COUNT # 
 #              uniform vec3 segmentSeeds[ ** SEGMENT_SEED_COUNT ** ];
 # TODO : Implement Reload Shader File Rebuild
+# TODO : Split QOpenGLTexture's and QImage Helper functions to 
+#          Separate Modules, to clean up code and cross module redundant methods
+# TODO : Split out Render Pass Functionality to separate Module
+#          Or Class At Least
+#
+# -- -- --
+#
+# GPU State Management, Monitoring, Sanity Checks, Locked Context Function Delay, & Thread Locking --
+#
+# TODO : Implement a "TryAgain" List, 'self.glDelayFunctionList', if Context Busy & Switch Context Fails
+#          Like when the context is pre/mid initiating and a mouse event or resize event is triggered
+#            Also if 'paintGL()', bind/release events, context change, during GL Function;
+#              Such as when a context is swapping buffers, as it seems relatively slow
+# TODO : Variables 'self.glContextReleased', 'self.glDelayFunctionList', & 'self.allowGlFinish'
+#          Should be managed in the 'ContextGLManager'; './ContextGL.py'
+#            Since thats what it meant for!!
+#
+# -- -- --
+#
+# Functionality & Local Management to move to ContextGLManager
+#
+# TODO : The context management, delayed functions, & glFinish toggling (As listed above)
+# TODO : Loaded Shader File Data, Imported Modules, for easy cross ViewportGL Sharing
+#          Request Shade from the Manager
+# TODO : Shader Program creation entirely ?
 
 
 #class TextureGLWidget(QtWidgets.QOpenGLWidget):
 class TextureGLWidget(QtGui.QOpenGLWindow):
 #class TextureGLWidget(QtOpenGL.QGLWidget):
+
+    ContextSurface_ToScreen = 0
+    ContextSurface_OffScreen = 1
+
     def __init__(self,parent=None, glId=0, glFormat=None, sharingContext=None, glEffect="default", initTexturePath="assets/glTempTex.jpg", saveImagePath=None ):
-        #QtWidgets.QOpenGLWidget.__init__(self,parent)
-        #QtOpenGL.QGLWidget.__init__(self,parent)
-        #QtOpenGL.QGLWidget.__init__(self, QtOpenGL.QGLFormat(), parent)
-        #super(TextureGLWidget, self).__init__(parent) 
         super(TextureGLWidget, self).__init__( sharingContext ) 
         
         # -- -- --
         
         self.id = glId
         self.parent = parent
+        
         self.glEffect = glEffect
-        # The share context seemed to changed when not stored to some capacity
+        
+        # Widget based share context seemed to changed when not stored at some capacity
         #   Unsure if it was actually disconnecting
         #     But it returns a different value for `.shareContext()` at init
+        # Global Shared Context still accessible
         self.glSourceContext = sharingContext
+        
         self.glContext = None
         self.gl = None
+        
+        self.storedGlContext = None
+        self.storedGlSurface = None
+        
         self.initialized = False
-        
-        
         
         # -- -- --
         
-        self.profile = QtGui.QOpenGLVersionProfile()
-        self.profile.setVersion( 2, 1 )
         
         
         self.glFormat = glFormat
         if self.glFormat == None :
             if sharingContext != None:
+                print("Is Sharing Context")
                 self.glFormat = sharingContext.format()
+                print( self.glFormat )
             else:
+                print("Is Unique Context")
                 self.glFormat = QtGui.QSurfaceFormat()
                 self.glFormat.setProfile( QtGui.QSurfaceFormat.CompatibilityProfile )    
                 #self.glFormat.setProfile( QtGui.QSurfaceFormat.CoreProfile )
-                self.glFormat.setVersion( 3, 3 )
+                #self.glFormat.setVersion( 3, 3 )
+                #self.glFormat.setVersion( 2, 1 )
+                self.glFormat.setVersion( 4, 1 )
                 self.glFormat.setRenderableType( QtGui.QSurfaceFormat.OpenGL )
                 #self.setSurfaceType( QtGui.QSurface.OpenGLSurface )
             
@@ -227,23 +285,43 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             #self.glFormat.setDepth( False )
             #self.glFormat.setStencil( False )
             
+        self.glFormat.setSwapBehavior( QtGui.QSurfaceFormat.DoubleBuffer )
+
+        self.setFormat( self.glFormat )
+        self.setSurfaceType( QtGui.QSurface.OpenGLSurface )
+            
+        self.profile = QtGui.QOpenGLVersionProfile( self.glFormat )
+        self.profile.setProfile( QtGui.QSurfaceFormat.CoreProfile )   
+        #self.profile.setVersion( 2, 1 )
+        self.profile.setVersion( 4, 1 )
+        
+        self.glSwapBufferBehavior = self.glFormat.swapBehavior()
+        self.useDoubleBuffer = False # Not Implemented
+        
         # -- -- --
         
-        self.debugOpenGL = True
+        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # Debug & Render Pass Displays
+        
+        # Trigger Create OpenGL Debugger
+        #   This is expensive on performance
+        self.debugOpenGL = False
+        
+        # Trigger Create PyQt Gui Pixmap Labels & Sub-Text
+        self.genRenderPassDisplays = False
+        
+            
+        
         self.glLogger = None
         if self.debugOpenGL and self.glFormat:
             print("Enabling OpenGL Debugger")
             self.glFormat.setOption(QtGui.QSurfaceFormat.DebugContext)
             self.glLogger = QtGui.QOpenGLDebugLogger(self)
             
+
+
         # -- -- --
-            
-        self.setFormat( self.glFormat )
-        self.setSurfaceType( QtGui.QSurface.OpenGLSurface )
-        
-        print( self.glFormat.options() )
-        
-        self.useDoubleBuffer = False
         
         """
         print("Context Printer")
@@ -264,44 +342,103 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         
         # -- -- --
         
-        # Should FBO's be making an offscreen surface current context durring render passes?
-        #self.glSrface = QtGui.QOffscreenSurface()
-        #self.glSurface.setFormat( self.glFormat )
-        #self.glSurface.create()
+        
+        # -- -- --
+        
+        """
+        self.glOnScreenFormat = QtGui.QSurfaceFormat()
+        self.glOnScreenFormat.setVersion(2, 1)
+        self.glOnScreenFormat.setProfile( QtGui.QSurfaceFormat.CompatibilityProfile ) 
+        #self.glOnScreenFormat.setProfile( QtGui.QSurfaceFormat.CoreProfile )
+        self.glOnScreenFormat.setRenderableType( QtGui.QSurfaceFormat.OpenGL )
+        """
+        
+        
+        # Build GL Surface for To-Screen Rendering
+        self.glToScreenSurface = None
+        if self.glContext != None :
+            self.glToScreenSurface = QtGui.QSurface()
+            self.glToScreenSurface.setFormat( self.glFormat )
+            self.glToScreenSurface.create()
+        
+        # -- -- --
+        
+        # FBOs seem better with offscreen render surfaces
+        #   Not fully implement
+        self.glOffScreenFormat = QtGui.QSurfaceFormat()
+        #self.glOffScreenFormat.setVersion(2, 1)
+        self.glOffScreenFormat.setVersion(4, 1)
+        self.glOffScreenFormat.setProfile( QtGui.QSurfaceFormat.CompatibilityProfile ) 
+        #self.glOffScreenFormat.setProfile( QtGui.QSurfaceFormat.CoreProfile )
+        self.glOffScreenFormat.setRenderableType( QtGui.QSurfaceFormat.OpenGL )
+
+        self.glOffScreenSurface = QtGui.QOffscreenSurface()
+        self.glOffScreenSurface.setFormat( self.glOffScreenFormat )
+        self.glOffScreenSurface.create()
         
         
         # -- -- --
+        
+        # Handle Locked or Busy GPU
+        # TODO : These variables should be 'ContextGLManager' functionality; './ContextGL.py'
+        #          Since thats what it meant for!!
+        #            Get it rolling here for now...
+        
+        # Prevent undesired Context Release when GPU is still working.
+        #   Currently - During Context SwapBuffer Event
+        self.glContextReleased = False
+        
+        # Failed Function List when GL Contest was not in a Released State
+        #   GPU Busy, hold updates till after current functions
+        self.glDelayFunctionList = []
+        
+        # Toggle the usage of 'gl.glFinish()'
+        #   As this is CPU Thread Blocking, leading to delays in PyQt Application responsiveness
+        #     But would prevent Race Conditions / Premature Context Releases ( Program Crashes )
+        #       Making the QtApp more stable, waiting for GPU Functions to complete safely
+        self.allowGlFinish = True
+        
+        
+        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # -- -- -- -- -- -- -- -- -- -- --
+        # -- -- -- -- -- -- -- -- -- -- --
+        
+        
+        # Currently TextureGL only supports one Shader Effect at a time
+        #   To be changes, but import held in self.Shader
+        # TODO : Move to ContextGLManager
+        self.Shader = None # Shader Import File
+        self.shaderSettings = {}
+        
+        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # Render Passes & GL Shader Variables
+        
+        
         
         # Mostly for verbose reasons
         #  If you want to custom name your passes,
         #    Update these values
         # TODO : Update this to be set by the Shader File itself
         #          Allowing for custom shader pipeline
+        #            Remove this variable entirely
         self.renderPassNames = {
                 'fbo' : 'fbo',
                 'fboSwap' : 'fboSwap',
                 'toScreen' : 'toScreen'
             }
+            
+        self.glRenderPassList = [] # Render Pass Order
+        self.glProgramList = {} # Render Pass Data
         
         
         
-        self.hasSim = False
-        self.simTimer = QtCore.QTimer(self)
-        self.simTimer.setSingleShot(True)
-        self.simTimerIterval = 100
-        self.simTimerRunCount = 10
-        self.simTimerRunner = 0
-        self.simRunnerPercent = 0.0
+        # -- -- --
         
-        self.Shader = None # Shader Import File
-        self.shaderSettings = {}
-        self.hasFrameBuffer = False
-        self.fboLocation = None
-        
-        # -- -- -- -- -- -- -- -- -- -- --
-        # -- -- -- -- -- -- -- -- -- -- --
-        # -- -- -- -- -- -- -- -- -- -- --
-        
+        # TODO: All of this needs to move to a 'RenderPassGL' Object
+        #         Either Call Object or Pass Data to Object
+        #
         # Order of 'self.glProgramList' Dict Keys to be set -
         #   'FBO', 'FBO Swap', 'Render To Screen'
         #     {'fbo'={}, 'fboSwap'={}, 'toScreen'={} }
@@ -351,7 +488,10 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 "fboObject":None,
                 "fboLocation":None,
                 "fboTexture":None,
-                "geoObject":None
+                "geoObject":None,
+                "vboObjects":None, # Stored for Memory Cleanup reasons
+                "debugSource":None,
+                "debugTarget":None
             }
         # Copied when new texture is loaded
         #   Linked in 'self.glProgramList[ RENDER_PASS_NAME ]'; ['samplers'] & ['textures']
@@ -369,8 +509,6 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 "texture":None # Memory Linked 'self.glPassTextureDict.copy()' Object
             }
         
-        self.glProgramList = {}
-        self.glRenderPassList = []
         
         
         # Found shader builtin Control Types set 'self.builtinControlledUniforms'
@@ -386,9 +524,9 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         #
         # Set from loaded glEffect Shader File -
         #     {
+        #       "mousePos" : [],
         #       "userOffset" : [],
         #       "userScale" : [],
-        #       "mousePos" : [],
         #       "texelSize" : [],
         #       "isFBO" : [],
         #       "isSimStep" : [],
@@ -436,39 +574,43 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         # -- -- -- -- -- -- -- -- -- -- --
         
         
-        # When this file was setup through PyOpenGL
-        #   Binding VBOs/EBOs & Texture at creation stayed connected
-        #     Assuming since I was using `gl.GL_STATIC_DRAW`
-        #   Seems I need to set more GL settings in this version of the script
-        # For now, Binds will be done at render time, with expense
-        self.glBindAtRender = True
         
-        self.hasFboProgram = False
-        self.glFboProgram = None
-        self.glFboUniformLocations = {}
-        self.glFboUniforms = {}
         
-        self.glBufferSwapProgram = None
-        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # Visible GUI Controls for Shader File Uniforms set to {'control':'visible'}
         self.glControls = {}
         
         
-        self.glTempImage = None
         self.frameBufferObject = None
         self.fboTexture = None
         self.swapFrameBufferObject = None
-        self.fboSwapTexture = None
         
-        self.glTargetObject = None
         
-        self.imgId = 0
-        self.glTempTex = initTexturePath
-        self.imgData = {}
+        
+        # When glEffect's Shader File, in './glShaders', has -
+        #   settings['fboShader']:True or settings['hasSim']:True
+        self.hasFboProgram = False
+        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # Render Pass Simulation State Data
+        self.hasSim = False
+        self.simTimer = QtCore.QTimer(self)
+        self.simTimer.setSingleShot(True)
+        self.simTimerIterval = 100
+        self.simTimerRunCount = 10
+        self.simTimerRunner = 0
+        self.simRunnerPercent = 0.0
+        
+        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # Current Image File for Display & Processing
+        self.glImagePath = initTexturePath
+        self.glImageObject = None
         self.curImage = ""
         
-        self.curOffset=[0,0]
-        self.curScale=[1,1]
         
+        # -- -- -- -- -- -- -- -- -- -- --
+        # TextureGL Viewport Widget Sizing
         self.imgWidth = 512
         self.imgHeight = 512
         
@@ -479,15 +621,9 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         #self.setFixedWidth( self.maxWidth )
         #self.setFixedHeight( self.maxHeight )
         
-        # -- -- --
         
-        self.offscreenVAO = None
-        self.renderVAO = None
-        self.positionVBO = None
-        self.uvVBO = None
-        
-        # -- -- --
-        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # Image Save To Disk Variables
         self.saveAllRenders = False
         self.saveNextRender = False
         self.outImageFolderPath = saveImagePath
@@ -503,8 +639,11 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         self.outCurSaveCountPad = 5
         self.outCurSaveCount = -1
         
-        # -- -- --
-        
+        # -- -- -- -- -- -- -- -- -- -- --
+        # User Mouse Event Variables
+        self.curOffset=[0,0]
+        self.curScale=[1,1]
+        #
         self.mouseLocked = False
         self.mouseMoved = False
         self.mouseOrigPos = None
@@ -515,17 +654,15 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         self.mouseButton = 0
         self.hasMousePosUniform = False
         
-            
-    # -- -- --
+    def setAttr( self, attrType, attrValue ):
+        if attrType == 'glDebugger' :
+            pass;
+        elif attrType == 'glRenderPassDisplays':
+            pass;
     
-    def screenChanged(self):
-        print("screenChanged")
-    
-    def frameSwapped(self):
-        print("frameSwapped")
-    
-    
-    # -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- User Input Signal Event Handling -- -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
     
     def mouseMoveEvent(self, e):
         if self.hasMousePosUniform:
@@ -583,7 +720,123 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 self.imageScale(self.mouseScaleFitted[0],self.mouseScaleFitted[1],True)
         self.mouseMoved = False
         
+    
+# -- -- -- -- -- -- -- -- -- -- --
+# -- Context Helper Functions - -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- --
 
+    # It comes to my attention that most of these functions,
+    #   Are completely useless...
+    #     While I'm using or intending for a shared context,
+    #       PyQt handles context switching well enough
+    #         Thus only Events or External Functions should Switch & Retain -> Restore existing contexts
+
+
+    def isContextCurrent(self):
+        return QtGui.QOpenGLContext.currentContext() == self.glContext
+
+    # TextureGLWidget.ContextSurface_ToScreen == 0
+    def getContextSurface( self, targetSurface = 0 ):
+        if targetSurface == self.ContextSurface_OffScreen :
+            #return self
+            return self.glOffScreenSurface
+        #elif targetSurface == self.ContextSurface_ToScreen :
+        #    #return self.glContext.surface()
+        return self.glToScreenSurface if self.glToScreenSurface else self
+    
+    # TODO : Should add a "Store prior context; then restore" ability
+    def enableContext( self, targetSurface = 0 ):
+        # Is the check needed?  Does Context switch occur if isCurrent?
+        #if QtGui.QOpenGLContext.currentContext() != self.glContext:
+        return self.glContext and self.glContext.makeCurrent( self.getContextSurface( targetSurface ) )
+    
+    def enableContextCheck( self, targetSurface = 0  ): #, targetSurface=None ):
+        if self.initialized and self.glContextReleased:
+            #if targetSurface==None:
+            #    targetSurface = self.glContext.surface()
+            return self.enableContext( targetSurface )
+        return False
+        
+    def disableContext( self, gpuSourceEvent = False ):
+        if self.glContext and ( self.glContextReleased or gpuSourceEvent ):
+            self.glContext.doneCurrent()
+            self.glContextReleased = True
+        return False
+    
+    # Not Needed --
+    def setContextState( self, toState = None ):
+        self.glContextReleased = toState
+    
+    # Not Needed --
+    def getContextState( self ):
+        return self.glContextReleased
+    
+    # Currently, the only required by 'paintGL()'
+    def isContextInitialized(self):
+        return self.initialized
+    
+    
+    # Context Swab Buffers
+    def swapSurfaceBuffers( self ):
+        # Set by glContext.format(); yielding QtGui.QSurfaceFormat.SwapBehavior enum
+        if self.glSwapBufferBehavior > 1 :
+            self.glContext.swapBuffers( self.getContextSurface() )
+            #self.glContext.swapBuffers( self.glContext.surface() )
+            #self.glContext.swapBuffers( self )
+            #self.glContext.swapBuffers()
+            # glFinish is thread locking, but swaps are needed prior to context release
+            #self.gl.glFinish()
+            
+    # If another context is current, bind for temporary needs
+    #   This only needed when multiple glContexts in QtApp
+    # TODO : Requests should defer to 'ContextGL', if exists
+    #          Should be retained, but redirected as needed
+    def tempBindContext(self):
+        if self.isContextCurrent():
+            # Bypassing Temp Bind,  Self Already Current
+            #   Race Conditions may exist, explore this behavior
+            return;
+        self.storedGlContext = QtGui.QOpenGLContext.currentContext()
+        self.storedGlSurface = self.storedGlContext.surface()
+        
+    def tempReleaseContext(self):
+        if self.storedGlContext != None:
+            self.storedGlContext.makeCurrent( self.storedGlSurface )
+            self.storedGlContext = None
+            self.storedGlSurface = None
+            
+# -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- GPU Status Helper Functions -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+
+    # Quite expesive, as it parses GPU State
+    #   But sometimes its needed for santity checks
+    #     Would rather a delay than a program crash
+    # Doesn't seem availible, at least in 2.1
+    def getGPUBusyState( self ):
+        gpuBusyState = None #self.gl.glGetInteger(GL_GPU_BUSY_NVX)
+        print(" |-  GPU Busy State - ", gpuBusyState)
+        return gpuBusyState
+    
+    # glFinish is Thread Locking
+    #   Preventing the program from progressing until GPU commands have been processed
+    #     Given that it locks the CPU thread, can be toggled with 'self.allowGlFinish = True/False'
+    def glFinishedThreadLock( self ):
+        if self.allowGlFinish :
+            self.gl.glFinish()
+            #QtGui.QOpenGLFunctions.
+    
+    # Send a glFence object and monitor its value
+    #   If the glFense holds a value, current command queue has processed
+    #     Non-Thread Blocking Monitoring
+    def glAwaitCommandQueue( self ):
+        #self.gl.glFenceSync( self.gl.GL_SYNC_GPU_COMMANDS_COMPLETE, GLbitfield flags)
+        pass;
+    
+# -- -- -- -- -- -- -- -- -- -- -- -- --
+# -- Image & Texture Helper Functions -- --
+# -- -- -- -- -- -- -- -- -- -- -- -- -- -- --
+            
     def loadImage( self, filePath ):
         curImgData = self.loadImageTex2D( filePath )
         wFit = float( self.maxWidth / curImgData['width'] )
@@ -624,7 +877,17 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             ][ wrapMode ]
         
         
-        curImage = QtGui.QImage( filename )
+        
+        
+        curImage = None
+        if filename == self.glImagePath:
+            if self.glImageObject == None:
+                self.glImageObject = QtGui.QImage( filename )
+        
+            curImage = self.glImageObject
+        else:
+            curImage = QtGui.QImage( filename )
+            
         # TODO : Prep alpha channel if `enableAlpha`
         #curImage = Image.open(filename)
         #print(filename)
@@ -662,7 +925,6 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         curTextureDict['width'] = texture.width()
         curTextureDict['height'] = texture.height()
         
-        print( curTextureDict )
         
         return curTextureDict
     
@@ -699,113 +961,63 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         
         self.paintGL()
         
+        
+# -- -- -- -- -- -- -- -- -- -- -- 
+# -- FBO Helper Functions -- -- -- -- 
+# -- -- -- -- -- -- -- -- -- -- -- -- --
     
-    def newFrameBuffer(self, fboSize=[512,512], samplerName=None, isTargetOrSampler=False ):
-        print( "Binding Data Frame Buffer")
-        
-        # Makes more logical sense to set up the fbo target manually
-        #   Wanted to access it as a pyqt object at random times
-        #     Not just a GL Texture Name, I know, I know, gl functions exist
-        
-        fboTargetImage = QtGui.QImage(fboSize[0], fboSize[1], QtGui.QImage.Format_RGBA8888)
-        fboTargetImage.fill( QtGui.QColor(0,0,0,0) )
-        
-        #fboTargetTexture = QtGui.QOpenGLTexture(image=fboTargetImage, target=QtGui.QOpenGLTexture.Target2D, genMipMaps=QtGui.QOpenGLTexture.DontGenerateMipMaps )
-        fboTargetTexture = QtGui.QOpenGLTexture(fboTargetImage)#, genMipMaps=QtGui.QOpenGLTexture.DontGenerateMipMaps )
-
-        #else:
-        #    fboTargetTexture.create()
-        
-        
-        #print( "fboTargetTexture" )
-        #print( fboTargetTexture.isCreated() )
-        
-        fboAttachment = QtGui.QOpenGLFramebufferObject.NoAttachment
-        
-        glFboFormat = QtGui.QOpenGLFramebufferObjectFormat()
-        glFboFormat.setInternalTextureFormat( fboTargetTexture.format() )
-        glFboFormat.setTextureTarget( fboTargetTexture.textureId() )
-        glFboFormat.setMipmap( False )
-        #glFboFormat.setAttachment( fboAttachment )        
+    # Create Default PyQt5 QOpenGLFramebufferObject 
+    def newQtFrameBuffer(self, fboSize=[512,512] ):
         
         frameBufferObject = QtGui.QOpenGLFramebufferObject( fboSize[0], fboSize[1])#, glFboFormat )
         
-        #print(frameBufferObject)
-        #print(dir(frameBufferObject))
+        if not frameBufferObject.isValid():
+            print('framebuffer binding failed')
+            
+        return frameBufferObject
+        
+    # Create PyQt5 QOpenGLFramebufferObject
+    #   With QOpenGLTexture Output Color Attachment
+    def newQtTextureFrameBuffer(self, fboSize=[512,512] ):
+
+        fboTargetImage = QtGui.QImage(fboSize[0], fboSize[1], QtGui.QImage.Format_RGBA8888)
+        fboTargetImage.fill( QtGui.QColor(0,0,0,0) )
+        
+        
+        fboTargetTexture = QtGui.QOpenGLTexture(fboTargetImage)
+
+        fboTargetTexture.setMinMagFilters( QtGui.QOpenGLTexture.Nearest, QtGui.QOpenGLTexture.Nearest )
+        fboTargetTexture.setWrapMode( QtGui.QOpenGLTexture.ClampToEdge )
+        # To fix 0-1 border seam
+        #fboTargetTexture.setWrapMode( QtGui.QOpenGLTexture.ClampToBorder )
+        fboTargetTexture.setAutoMipMapGenerationEnabled( False )
+        
         # -- -- --
-        """
         
+        frameBufferObject = QtGui.QOpenGLFramebufferObject( fboSize[0], fboSize[1])#, glFboFormat )
         
+        frameBufferObject.bind()
         
-        self.frameBufferObject = gl.glGenFramebuffers(1)
-        gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, self.frameBufferObject)
-         
-        # attach color
-        #gl.glFramebufferTexture(gl.GL_FRAMEBUFFER, gl.GL_COLOR_ATTACHMENT0, colorTex, 0);
-                    
-        self.fboTexture = gl.glGenTextures(1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, self.fboTexture)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_NEAREST)
-        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_NEAREST)
-        #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP)
-        #gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP)
-        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, fboSize[0], fboSize[1], 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, None)
+        self.gl.glFramebufferTexture2D( self.gl.GL_FRAMEBUFFER, self.gl.GL_COLOR_ATTACHMENT0, self.gl.GL_TEXTURE_2D, fboTargetTexture.textureId(), 0)
         
-        #gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGBA, fboSize[0], fboSize[1], 0, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE, self.imgData[self.glTempTex]['data'] )
-        gl.glFramebufferTexture2D(
-            gl.GL_FRAMEBUFFER,
-            gl.GL_COLOR_ATTACHMENT0, #gl.GL_COLOR_ATTACHMENT0,
-            gl.GL_TEXTURE_2D,
-            self.fboTexture,
-            0
-        )
-        
-        
-        
-        """
-        """
-        # FBO Render Target Texture -
-        if isTargetOrSampler :
-            fboTargetTexture = QtGui.QOpenGLTexture( QtGui.QOpenGLTexture.Target2D )
-            fboTargetTexture.setSize( fboSize[0], fboSize[1] )
-            fboTargetTexture.setFormat( QtGui.QOpenGLTexture.RGBA8_UNorm )
-            fboTargetTexture.allocateStorage()
-            
-            fboTargetImage = QtGui.QImage(fboSize[0], fboSize[1], QtGui.QImage.Format_RGBA8888)
-            fboTargetImage.fill( QtGui.QColor(0,0,0,0) )
-            fboTargetTexture.setData( fboTargetImage )
-            
-            frameBufferObject.bind()
-            frameBufferObject.addColorAttachment( fboTargetTexture )
-        
-        else:
-        
-            fboSamplerTexture = QtGui.QOpenGLTexture( QtGui.QOpenGLTexture.Target2D )
-            fboSamplerTexture.setFormat( QtGui.QOpenGLTexture.RGBA8_UNorm )
-            fboSamplerTexture.setSize( fboSize[0], fboSize[1] )
-            fboSamplerTexture.create()
-        """
         # -- -- --
         
         if not frameBufferObject.isValid():
             print('framebuffer binding failed')
             
-        return frameBufferObject, None# fboTargetTexture
+        return frameBufferObject, fboTargetTexture
         
-    
-    def fboTransferData(self):
-        QtGui.QOpenGLFramebufferObject.blitFramebuffer( self.frameBufferObject, self.swapFrameBufferObject )
         
     def setTargetGLObject(self, glTargetObject=None):
         print( "---------------------" )
-        print( "Set TargetGL Object" )
+        print( "Set TargetGL Object, Cancelling, Logic Updated" )
         print( glTargetObject )
-        if glTargetObject != None:
-            self.glTargetObject = glTargetObject
-            self.bufferToTargetGL()
+        #if glTargetObject != None:
+        #    self.glTargetObject = glTargetObject
+        #    self.bufferToTargetGL()
     def bufferToTargetGL(self):
         if self.glTargetObject != None:
-            print(" BUFFER TO TARGETGL ")
+            print(" BUFFER TO TARGETGL, Cancelling, Logic Updated ")
             #displayImage = gl.glGetTexImage( gl.GL_TEXTURE_2D, self.fboTexture, gl.GL_RGB, gl.GL_UNSIGNED_BYTE, outputType=None )
             #self.glTargetObject.setTextureFromImageData( 0, displayImage )
             
@@ -821,7 +1033,7 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             #from .glShaders import rawTextureShader as Shader
             curShader = importlib.import_module(".glShaders.rawTextureShader", __package__ )
             
-        elif "swapTexture" in glEffect:
+        elif "swaptexture" in glEffect:
             #from .glShaders import swapTextureShader as Shader
             curShader = importlib.import_module(".glShaders.swapTextureShader", __package__ )
             
@@ -886,6 +1098,7 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         toFragment = QtGui.QOpenGLShader( QtGui.QOpenGLShader.Fragment, self )
         toFragment.compileSourceCode( self.Shader.fragment )
         
+        
         # -- -- -- --
         
         program = QtGui.QOpenGLShaderProgram()
@@ -895,6 +1108,10 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         program.bindAttributeLocation('uv',1)
         program.link()
         
+        # Free Ram, but is this potentiall problematic?
+        self.gl.glDetachShader( program.programId(), toVertex.shaderId() )
+        self.gl.glDetachShader( program.programId(), toFragment.shaderId() )
+            
         
         curToScreenPassName = self.renderPassNames['toScreen']
         curProgramPass = self.glPassBaseDict.copy()
@@ -930,18 +1147,14 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             fboProgram.bindAttributeLocation('uv',1)
             fboProgram.link()
         
-            #fboProgram.bind()
-            #self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
-            #self.gl.glUniform1i( fboProgram.uniformLocation('samplerTex'), 0 )
-            #self.gl.glActiveTexture( self.gl.GL_TEXTURE1 )
-            #self.gl.glUniform1i( fboProgram.uniformLocation('bufferRefTex'), 1 )
-            #fboProgram.release()
-        
-            #self.glFboProgram = fboProgram
-            #self.glFboUniforms = fboUniforms
+            # Free Ram, but is this potentiall problematic?
+            self.gl.glDetachShader( fboProgram.programId(), fboVertex.shaderId() )
+            self.gl.glDetachShader( fboProgram.programId(), fboFragment.shaderId() )
             
-            fboBufferObject, fboTextureObject = self.newFrameBuffer( [512,512] )
-            print(fboBufferObject)
+        
+            
+            fboBufferObject, fboTextureObject = self.newQtTextureFrameBuffer( [512,512] )
+
             curFboPassName = self.renderPassNames['fbo']
             curFboProgramPass = self.glPassBaseDict.copy()
             curFboProgramPass['passType'] = "fbo"
@@ -984,18 +1197,16 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             fboSwapProgram.addShader( fboSwapFragment )
             fboSwapProgram.bindAttributeLocation('position',0)
             fboSwapProgram.bindAttributeLocation('uv',1)
-            fboSwapProgram.link()
+            
+            if not fboSwapProgram.link():
+                print("!! Warning, fboSwap pass shader failed to link !!")
         
-            # swapProgram.bind()
-            # self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
-            # self.gl.glUniform1i( swapProgram.uniformLocation('samplerTex'), 0 )
-            # swapProgram.release()
+            # Free Ram, but is this potentiall problematic?
+            self.gl.glDetachShader( fboSwapProgram.programId(), fboSwapVertex.shaderId() )
+            self.gl.glDetachShader( fboSwapProgram.programId(), fboSwapFragment.shaderId() )
             
-            fboSwapBufferObject,fboSwapTextureObject = self.newFrameBuffer( [512,512] )
-            
-            self.glBufferSwapProgram = fboSwapProgram
-            
-            print(fboSwapBufferObject)
+            fboSwapBufferObject,fboSwapTextureObject = self.newQtTextureFrameBuffer( [512,512] )
+
             
             curFboSwapPassName = self.renderPassNames['fboSwap']
             curFboSwapProgramPass = self.glPassBaseDict.copy()
@@ -1010,7 +1221,8 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             self.glProgramList[ curFboSwapPassName ] = curFboSwapProgramPass
             # -- -- --
             self.glRenderPassList.append( curFboSwapPassName )
-            
+        
+        
         # -- -- -- --
         # -- -- -- --
         # -- -- -- --
@@ -1020,34 +1232,6 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         self.glRenderPassList.append( curToScreenPassName )
 
 
-        """
-        # Original PyOpenGL known working binding for reference
-        
-        vshader = QOpenGLShader(QOpenGLShader.Vertex, self)
-        vshader.compileSourceCode(self.vsrc)
-
-        fshader = QOpenGLShader(QOpenGLShader.Fragment, self)
-        fshader.compileSourceCode(self.fsrc)
-
-        self.program = QOpenGLShaderProgram()
-        self.program.addShader(vshader)
-        self.program.addShader(fshader)
-        self.program.bindAttributeLocation('vertex',
-                self.PROGRAM_VERTEX_ATTRIBUTE)
-        self.program.bindAttributeLocation('texCoord',
-                self.PROGRAM_TEXCOORD_ATTRIBUTE)
-        self.program.link()
-
-        self.program.bind()
-        self.program.setUniformValue('texture', 0)
-
-        self.program.enableAttributeArray(self.PROGRAM_VERTEX_ATTRIBUTE)
-        self.program.enableAttributeArray(self.PROGRAM_TEXCOORD_ATTRIBUTE)
-        self.program.setAttributeArray(self.PROGRAM_VERTEX_ATTRIBUTE,
-                self.vertices)
-        self.program.setAttributeArray(self.PROGRAM_TEXCOORD_ATTRIBUTE,
-                self.texCoords)
-        """
         # -- -- -- --
         
         return
@@ -1063,11 +1247,14 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         glProgramPassType = glProgramData['passType']
         glProgram = glProgramData['program']
         glProgramUniforms = glProgramData['uniforms']
+        glProgramFBO = glProgramData['fboObject']
         
         glProgramUniformsKeys = glProgramUniforms.keys()
         
         glProgram.bind()
         
+        if glProgramFBO:
+            glProgramFBO.bind()
         
         # program.bind()
         # self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
@@ -1149,34 +1336,39 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 
                 #glProgramData['program']
                 
-                curTextureLoad = self.loadImageTex2D( self.glTempTex )
+                curTextureLoad = self.loadImageTex2D( self.glImagePath )
                 
                 # -- -- --
                 
                 uLocation = glProgram.uniformLocation( curUniform )
                 
-                # -- -- --
-                
-                # Set Shader Program's Uniform Bind Location
-                #samplerUniformIndex += 1
-                #glProgram.setUniformValue( curUniform, samplerUniformIndex )
-                #uSettings['samplerBind'] = samplerUniformIndex
-                
-                # Bind texture to texture location and bind uniform to texture
-                glTexLocation = self.gl.GL_TEXTURE0 + uLocation
-                self.gl.glActiveTexture( glTexLocation )
-                curTextureLoad['texture'].bind()
-                #curTextureLoad['texture'].bind( samplerUniformIndex )
-                
-                glProgram.setUniformValue( curUniform, curTextureLoad['texture'].textureId() )
-                
-                curTextureLoad['texture'].release()
-                
-                self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
                 
                 # -- -- --
                 
-                glProgramData['textures'].append( curTextureLoad )
+                if uLocation >= 0 :
+                    # Set Shader Program's Uniform Bind Location
+                    #samplerUniformIndex += 1
+                    #glProgram.setUniformValue( curUniform, samplerUniformIndex )
+                    #uSettings['samplerBind'] = samplerUniformIndex
+                    
+                    # Bind texture to texture location and bind uniform to texture
+                    #glTexLocation = self.gl.GL_TEXTURE0 + uLocation
+                    #self.gl.glActiveTexture( glTexLocation )
+                    curTextureLoad['texture'].bind( uLocation )
+                    #curTextureLoad['texture'].bind( samplerUniformIndex )
+                    
+                    #glProgram.setUniformValue( curUniform, curTextureLoad['texture'].textureId() )
+                    glProgram.setUniformValue( curUniform, uLocation )
+                    
+                    curTextureLoad['texture'].release( uLocation )
+                    
+                    self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
+                    
+                    # -- -- --
+                    
+                    glProgramData['textures'].append( curTextureLoad )
+                else:
+                    print(" ! Warning, Failed to located Sampler Uniform '"+curUniform+"' in '"+glProgramPassName+"'; Uniform may not be used in Shader Code.")
                 
                 # -- -- --
                 
@@ -1204,23 +1396,17 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                     self.setStatusBar( "Warning, Sampler '"+curUniform+"' in '"+uSettings['type']+"' pass is reading itself without Double Buffers"+warningSuggestion, 1, False )
                         
                 
-                self.hasFrameBuffer = True
-                #print(self.fboLocation)
-                
                 #samplerLocation = self.glProgram.uniformLocation( samplerName )
                 #self.glProgram.setUniformValue( samplerLocation, self.swapFrameBufferObject.texture() )
             
                 # Set Shader Program's Uniform Bind Location
                 #   While other render passes,
-                #     Default behaviour is to bind the pass's output to a sampler
+                #     Default behavior is to bind the pass's output to a sampler
                 
-                sourcePassType = self.renderPassNames[ uSettings['type'] ]
-                sourcePassFBO = glProgramDataDict[ sourcePassType ]['fboObject']
-                sourcePassTexture = glProgramDataDict[ sourcePassType ]['fboTexture']
                 
-                print( uSettings['type'] )
-                print( sourcePassType )
-                print( glProgramDataDict[ sourcePassType ] )
+                #print( uSettings['type'] )
+                #print( sourcePassType )
+                #print( glProgramDataDict[ sourcePassType ] )
                 
                 #samplerUniformIndex += 1
                 #glProgram.setUniformValue( curUniform, sourcePassTexture.textureId() )
@@ -1233,18 +1419,43 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 
                 # -- -- --
                 
-                glTexLocation = self.gl.GL_TEXTURE0 + uLocation
-                self.gl.glActiveTexture( glTexLocation )
-                #glProgramData['fboObject'].bind()
-                self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, sourcePassFBO.texture())
-                #curTextureLoad['texture'].bind( samplerUniformIndex )
+                if uLocation >= 0 and 'fboObject' in glProgramData :
+                    
+                    
                 
-                glProgram.setUniformValue( curUniform, glTexLocation )
-                
-                #curTextureLoad['texture'].release()
-                
-                self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, 0)
-                self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
+                    sourcePassType = self.renderPassNames[ uSettings['type'] ]
+                    
+                    if sourcePassType in glProgramDataDict and 'fboTexture' in glProgramDataDict[ sourcePassType ] : # and 'fboObject' in glProgramDataDict[ sourcePassType ] :
+                        #sourcePassFBO = glProgramDataDict[ sourcePassType ]['fboObject']
+                        sourcePassTexture = glProgramDataDict[ sourcePassType ]['fboTexture']
+                        
+                        #fboProgram.bind()
+                        
+                        sourcePassTexture.bind( uLocation )
+                        
+                        #self.gl.glActiveTexture( self.gl.GL_TEXTURE0 + uLocation )
+                        #self.gl.glUniform1i( curUniform, 0 )
+                        glProgram.setUniformValue( curUniform, uLocation )
+                        
+                        sourcePassTexture.release( uLocation )
+                        
+                        #fboProgram.release()
+                    """
+                    glTexLocation = self.gl.GL_TEXTURE0 + uLocation
+                    self.gl.glActiveTexture( glTexLocation )
+                    #glProgramData['fboObject'].bind()
+                    self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, sourcePassFBO.texture())
+                    #curTextureLoad['texture'].bind( samplerUniformIndex )
+                    
+                    glProgram.setUniformValue( curUniform, glTexLocation )
+                    
+                    #curTextureLoad['texture'].release()
+                    
+                    self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, 0)
+                    self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
+                    """
+                else:
+                    print(" ! Warning, Failed to located Sampler Uniform '"+curUniform+"' in '"+glProgramPassName+"'; Uniform may not be used in Shader Code.")
                 
                 # -- -- --
                 
@@ -1273,7 +1484,10 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                     if curUniform not in self.builtinControlledUniforms[ uSettings['control'] ][ glProgramPassName ] :
                         newBuiltinData = self.newBuiltinDataDict( uSettings['control'], uSettings )
                         self.builtinControlledUniforms[ uSettings['control'] ][ glProgramPassName ][ curUniform ] = newBuiltinData
-                    
+        
+        if glProgramFBO:
+            glProgramFBO.release()
+            
         glProgram.release()  
         
         #
@@ -1347,7 +1561,7 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         return newBuiltinData
                 
     def initializeGL(self):
-        
+        print( " -- GL Init Started" )
         if self.glLogger:
             self.glLogger.initialize()
             #self.glLogger.messageLogged.connect(lambda message: QtCore.qDebug(
@@ -1361,19 +1575,28 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         # Seems all contexts are still sharing when checking
         #   But still mystery magic to me
         if self.glContext == None :
+            print(" !! Warning; No self.glContext set before 'initializeGL()' !!")
+            print(" !! '"+self.glEffect+"' ImageShaderGL may be Unstable !!")
             self.glContext = self.context()
             # print("Created Shared Context")
             # self.glContext = QtGui.QOpenGLContext()
-            # self.glContext.setShareContext( self.glSourceContext )
-            # self.glContext.setFormat( self.glFormat )
-            # self.glContext.create()
+            self.glContext.setShareContext( self.glSourceContext )
+            self.glContext.setFormat( self.glFormat )
+            self.glContext.create()
         #self.glContext.setShareContext( self.glContext )
         
-        self.glContext.makeCurrent( self.glContext.surface() )
-        #self.glContext.aboutToBeDestroyed.connect( self.destroy )
-            
+        
+        self.glToScreenSurface = self.glContext.surface()
+        #self.enableContext()
+        self.enableContext()
+        self.glContext.aboutToBeDestroyed.connect( self.destroy )
+        self.frameSwapped.connect( self.frameSwapComplete )
+
         self.gl = self.glContext.versionFunctions( self.profile )
         self.gl.initializeOpenGLFunctions()
+        
+        
+        self.glSwapBufferBehavior = self.glContext.format().swapBehavior()
         
         
         # For future double output buffers, multiple render targets
@@ -1393,12 +1616,14 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         # Build render pass' shader needs and uniform binds
         #self.glProgramList[ curToScreenPassName ]
         
-        
-        for currentPassName in self.glRenderPassList:
+        # TODO : Move Calls to RenderPassGL Object
+        for x,currentPassName in enumerate( self.glRenderPassList ):
             curPassDataDict = self.glProgramList[ currentPassName ]
             curPassProgram = curPassDataDict['program']
 
             self.buildUniforms( currentPassName, self.glProgramList )
+            
+            curPassProgram.bind()
             
             curPassVAO = QtGui.QOpenGLVertexArrayObject( self )
             curPassVAO.create()
@@ -1406,91 +1631,27 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             curPassVAO.bind()
             vaoPositionList = [ -1,1, 1,1, -1,-1, 1,-1 ]
             vaoTexCoordList = [ 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0 ]
-            self.positionVBOOff = self.setVertexBuffer( vaoPositionList, 2, curPassProgram, "position" )
-            self.uvVBOOff = self.setVertexBuffer( vaoTexCoordList, 2, curPassProgram, "uv" )
+            positionVBO = self.setVertexBuffer( vaoPositionList, 2, curPassProgram, "position" )
+            uvVBO = self.setVertexBuffer( vaoTexCoordList, 2, curPassProgram, "uv" )
             curPassVAO.release()
             
+            curPassProgram.release()
+            
             curPassDataDict['geoObject'] = curPassVAO
-
+            
+            if curPassDataDict['vboObjects'] == None:
+                curPassDataDict['vboObjects'] = []
+                
+            # Holding for Memory Management needs
+            curPassDataDict['vboObjects'].append( positionVBO )
+            curPassDataDict['vboObjects'].append( uvVBO )
+            """
+            curDebugSource, curDebugTarget = self.buildRenderPassDebug( curPassDataDict )
+            curPassDataDict['debugSource'] = curDebugSource
+            curPassDataDict['debugTarget'] = curDebugTarget
+            """
+            
         
-        
-        print(self.glRenderPassList)
-        
-        
-        # Uniforms processed, connect any FBO Buffers to Uniforms
-        #   Setting at render time for now
-        #self.connectTextureSamplers()
-        
-        
-        # fboImagePath = "assets/glEdgeFinder_tmp2_alpha.png"
-        # #self.glTempImage = QtGui.QImage( self.glTempTex ).mirrored()
-        # self.glTempImage = QtGui.QImage( fboImagePath ).mirrored()
-        # self.frameBufferObject = QtGui.QOpenGLFramebufferObject( self.glTempImage.width(), self.glTempImage.height() )
-        # self.frameSwapBufferObject = QtGui.QOpenGLFramebufferObject( self.glTempImage.width(), self.glTempImage.height() )
-        # self.fboTexture = QtGui.QOpenGLTexture( self.glTempImage )
-        # #self.fboTexture.create()
-        
-        
-        
-        
-        
-        
-        #self.gl.glBegin( self.gl.GL_TRIANGLE_STRIP )
-        
-        # Build data
-        #data = np.zeros((4, 2), dtype=np.float32)
-        # From another -
-        """
-        data = np.zeros(4, [("position", np.float32, 2),("uv", np.float32, 2)])
-        data['position'] = [(-1,+1), (+1,+1), (-1,-1), (+1,-1)]
-        data['uv'] = [(0,0), (1,0), (0,1), (1,1)]
-        #posData = [ -1,1, 1,1, -1,-1, 1,-1 ]
-        #uvData = [ 0,0, 1,0, 0,1, 1,1 ]
-
-        indices = [0, 1, 2, 2, 3, 0]
-        indices = np.array(indices, dtype=np.uint32)
-        
-        # TODO : I implemented a VBO and EBO without quite knowing why they were needed
-        #          Opposed to a VAO, aside from UV support, which uhhhh
-        #            Look into this more
-        
-        self.VBO = QtGui.QOpenGLBuffer( QtGui.QOpenGLBuffer.VertexBuffer )
-        self.VBO.create()
-        self.VBO.bind()
-        self.VBO.allocate( data, data.itemsize * len(data) )
-
-        stride = data.strides[0]
-        offset = 0 #ctypes.c_void_p(0)
-        
-        posAttrLoc = self.glProgram.attributeLocation( "position" )
-        print(posAttrLoc)
-        self.glProgram.enableAttributeArray( posAttrLoc )
-        self.glProgram.setAttributeBuffer( posAttrLoc, self.gl.GL_FLOAT, offset, 2, stride )
-        
-        offset = 8 #ctypes.c_void_p(8)
-        uvAttrLoc = self.glProgram.attributeLocation( "uv" )
-        print(uvAttrLoc)
-        self.glProgram.enableAttributeArray( uvAttrLoc )
-        self.glProgram.setAttributeBuffer( uvAttrLoc, self.gl.GL_FLOAT, offset, 2, stride )
-        
-        self.VBO.release()
-
-        # -- -- --
-
-        self.EBO = QtGui.QOpenGLBuffer( QtGui.QOpenGLBuffer.IndexBuffer )
-        self.EBO.create()
-        self.EBO.bind()
-        self.EBO.allocate(indices, len(indices) * indices.itemsize)
-        self.EBO.release()
-        """
-        # -- -- --
-        
-        # Needed??
-        #self.gl.glEnable(self.gl.GL_TEXTURE_2D) 
-        
-        # -- -- --
-        
-        print("pre viewport shift")
         
         self.gl.glViewport(0, 0, self.imgWidth, self.imgHeight) # Out res is [512,512] setting by default
         
@@ -1515,6 +1676,8 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         vbo = QtGui.QOpenGLBuffer( QtGui.QOpenGLBuffer.VertexBuffer )
         vbo.create()
         vbo.bind()
+        
+        vbo.setUsagePattern( QtGui.QOpenGLBuffer.StaticDraw ) # Setting - gl.GL_STATIC_DRAW
 
         vertices = np.array( dataList, np.float32 )
         vbo.allocate( vertices, vertices.shape[0] * vertices.itemsize )
@@ -1522,9 +1685,30 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         attributeLocation = glProgram.attributeLocation( glAttrName )
         glProgram.enableAttributeArray( attributeLocation )
         glProgram.setAttributeBuffer( attributeLocation, self.gl.GL_FLOAT, 0, stride )
-        vbo.release()
+        #vbo.release()
 
         return vbo
+        
+    # -- -- --
+        
+    def buildRenderPassDebug( self, debugLabel="Debug Display", renderPassDict=None ) :
+        # Find Object with Supported 'object.toImage()'
+        if self.parent :
+            if hasattr( self.parent, "buildDebugDisplay" ) :
+                self.parent.buildDebugDisplay(  )
+            
+        return None,None
+        
+        """
+            curPassDataDict['debugTarget'] = self.buildRenderPassDebug( curPassDataDict )
+            
+
+        self.buildRenderPassDebug(  )
+        self.glRenderPassList = [] # Render Pass Order
+        self.glProgramList = {} # Render Pass Data
+        self.targetDisplayQtWidgets = {}
+        """
+        
         
     def drawToDebugWidgets(self):
         if hasattr(self.parent,'bufferDisplay'):
@@ -1534,8 +1718,10 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             except:
                 pass;
             if curFboObj:
-                print(curFboObj)
+                curFboObj.bind()
                 pix = QtGui.QPixmap.fromImage( curFboObj.toImage(True) )
+                curFboObj.release()
+                
                 pix= pix.transformed(QtGui.QTransform().scale(1, -1))
                 self.parent.bufferDisplay.setPixmap( pix )
             
@@ -1546,7 +1732,10 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             except:
                 pass;
             if curFboObj:
+                curFboObj.bind()
                 pix = QtGui.QPixmap.fromImage( curFboObj.toImage(True) )
+                curFboObj.release()
+                
                 pix= pix.transformed(QtGui.QTransform().scale(1, 1))
                 self.parent.swapDisplay.setPixmap( pix )
             
@@ -1557,15 +1746,18 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             pix = QtGui.QPixmap.fromImage( outImage )
             self.parent.renderDisplay.setPixmap( pix )
             
+        self.gl.glFinish()
+        
         return;
     
+    #def releaseTextureGL( self, activeTextureId, bindTextureId )
     
     # Bind exising textures to existing Shader Uniforms
     #   Its asumed the dictionary info is always up to date
     #     As it should be using memory linked objects
     # TODO : Support Double Buffer Swap Bindings, 'GL_BACK'
     def bindTextureSamplers(self, glProgramPassName, glProgramDataDict ):
-        #if self.hasFrameBuffer :
+
         curPassDataDict = glProgramDataDict[ glProgramPassName ]
         curPassType = curPassDataDict['passType']
         curPassProgram = curPassDataDict['program']
@@ -1576,32 +1768,56 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         #   Might be useful adding some checks, for custome bind needs
         #curPassProgram.bind()
         
-        returnBoundObjects = []
+        returnObjectReleaseFuncs = []
         samplerRunner=0
         #textureBind
-        print(" Bind Textures ")
+        #print(" Bind Textures - ",glProgramPassName)
         #print(curPassSamplers.keys())
         for curSamplerUniform in curPassSamplers:
             curSamplerData = curPassSamplers[ curSamplerUniform ]
             curBindType = curSamplerData['type']
             curBindTexture = curSamplerData['texture']
             curBindLocation = curSamplerData['location']
-            #print( curSamplerUniform )
-            #print( curSamplerData )
-            #print( curPassProgram.uniformLocation( curSamplerUniform) )
-            #print( curSamplerData['texture'].textureId() )
+            
+            
+            # TODO : Likely better to put this on some async "TryAgain" list at a sparse interval
+            if curBindLocation < 0:
+                # Attempt to parse unlocated Sampler Uniform durring 'buildUniforms()' 
+                uLocation = curPassProgram.uniformLocation( curSamplerUniform )
+                if uLocation >= 0 :
+                    curBindLocation = uLocation
+                    curSamplerData['location'] = uLocation
+                else:
+                    # Sampler Uniform location not found, bypass texture bind
+                    #   May be developer error, leaving a Uniform Dict entry, or missspelling in shader,
+                    #     More likely, the OpenGL compiler is optimizing out the Uniform, removing it
+                    #       From lack of any contribution to the final output color in the code
+                    continue;
             
             
             
             
             #curSamplerData['type']
             #curBindTexture.bind()# curSamplerData['location'] )
-            #returnBoundObjects.append( curBindTexture )
+            #returnObjectReleaseFuncs.append( curBindTexture )
             
             #print(curSamplerUniform)
             #print(curSamplerData)
             #fboProgram.bind()
             #fboProgram.release()
+            
+            
+            self.gl.glActiveTexture( self.gl.GL_TEXTURE0 + curBindLocation )
+            #texBindLocation = curBindLocation # self.gl.GL_TEXTURE0 + curBindLocation
+            #print(texBindLocation)
+            
+            #curBindTexture.bind( curBindTexture.textureId() )
+            curBindTexture.bind( curBindLocation )
+            #curPassProgram.setUniformValue( curSamplerUniform, curBindTexture.textureId() )
+            curPassProgram.setUniformValue( curSamplerUniform, curBindLocation )
+            
+            returnObjectReleaseFuncs.append( partial( curBindTexture.release, curBindLocation ) )
+            
             
             """
             program.bind()
@@ -1614,15 +1830,19 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             
             #partial( curBindTexture.release()
             
+            """
             if curSamplerData['type'] == "texture" :
             
-                self.gl.glActiveTexture( self.gl.GL_TEXTURE0 + curBindLocation )
+                #self.gl.glActiveTexture( self.gl.GL_TEXTURE0 + curBindLocation )
+                texBindLocation = curBindLocation # self.gl.GL_TEXTURE0 + curBindLocation
+                #print(texBindLocation)
                 
-                curBindTexture.bind( curBindTexture.textureId() )
-                curPassProgram.setUniformValue( curSamplerUniform, curBindTexture.textureId() )
+                #curBindTexture.bind( curBindTexture.textureId() )
+                curBindTexture.bind( texBindLocation )
+                #curPassProgram.setUniformValue( curSamplerUniform, curBindTexture.textureId() )
+                curPassProgram.setUniformValue( curSamplerUniform, texBindLocation )
                 
-                returnBoundObjects.append( curBindTexture )
-                
+                returnObjectReleaseFuncs.append( partial( curBindTexture.release, texBindLocation ) )
             elif curSamplerData['type'] == "fbo" :
                 
                 curFboTexture = glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject']
@@ -1636,15 +1856,10 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 #curPassProgram.setUniformValue( curSamplerUniform, curFboTexture.textureId() )
                 curPassProgram.setUniformValue( curSamplerUniform, curBindLocation )
                 
-                returnBoundObjects.append( curFboTexture )
+                returnObjectReleaseFuncs.append( curFboTexture )
+                returnObjectReleaseFuncs.append( partial( self.releaseTextureGL, texBindLocation ) )
                 
             
-            
-                """print( glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'].texture() )
-                glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'].bind()
-                returnBoundObjects.append( glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'] )
-                #curPassProgram.setUniformValue( curSamplerUniform, curBindTexture.textureId() )
-                curPassProgram.setUniformValue( curSamplerUniform, glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'].texture() )"""
             elif curSamplerData['type'] == "fboSwap" :
                 curFboTexture = glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject']
                 #curFboTexture = glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboTexture']
@@ -1657,21 +1872,16 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 #curPassProgram.setUniformValue( curSamplerUniform, curFboTexture.textureId() )
                 curPassProgram.setUniformValue( curSamplerUniform, curBindLocation )
                 
-                returnBoundObjects.append( curFboTexture )
+                returnObjectReleaseFuncs.append( curFboTexture )
                 
-                """print( glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'].texture() )
-                glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'].bind()
-                returnBoundObjects.append( glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'] )
-                #curPassProgram.setUniformValue( curSamplerUniform, curBindTexture.textureId() )
-                curPassProgram.setUniformValue( curSamplerUniform, glProgramDataDict[ self.renderPassNames[curSamplerData['type']] ]['fboObject'].texture() )"""
             elif curSamplerData['type'] == "toScreen" :
                 # Not implemented
                 pass;
-        
+            """
         #curPassProgram.release()
         
         # Sampler Binds should be complete
-        return returnBoundObjects
+        return returnObjectReleaseFuncs
     
     def bindRenderPass( self, glRenderPassName, glRenderPassesData=None ):
         if glRenderPassesData == None:
@@ -1690,12 +1900,12 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         glPassFBO = glProgramData['fboObject']
         glPassGeoObject = glProgramData['geoObject']
         
-        
+        """
         if glRenderPassName == glPassType:
             print( "Rendering '"+glRenderPassName+"' pass" )
         else:
             print( "Rendering '"+glRenderPassName+"' as '"+glPassType+"' pass" )
-        
+        """
         
         # -- -- --
         
@@ -1719,68 +1929,38 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         """
         
         
-        curTextureBinds = self.bindTextureSamplers( glRenderPassName, glRenderPassesData )
+        curTextureReleaseList = self.bindTextureSamplers( glRenderPassName, glRenderPassesData )
         
         glPassGeoObject.bind()
+        
             
         # -- -- --
-            
-        #self.gl.glClear( self.gl.GL_COLOR_BUFFER_BIT )
+        
+        self.gl.glViewport( 0, 0, self.imgWidth, self.imgHeight )
+        self.gl.glClear( self.gl.GL_COLOR_BUFFER_BIT )
         self.gl.glDrawArrays( self.gl.GL_TRIANGLE_STRIP, 0, 4 )
-            
+        
+        
         # -- -- --
             
             
         glPassGeoObject.release()
         
-        for boundTexture in curTextureBinds:
-            boundTexture.release()
+        
+        for boundTextureFunc in curTextureReleaseList:
+            boundTextureFunc()
+            #boundTextureFunc.release()
             
+        #self.gl.glBindTexture(self.gl.GL_TEXTURE_2D, 0)
+        #self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
+        
         if glPassFBO:
             glPassFBO.release()
             
         glPassProgram.release()
             
         
-        # offscreen render
-        #self.fboTexture.bind()
-        """
-        self.frameBufferObject.bind()
-        self.gl.glClear(self.gl.GL_COLOR_BUFFER_BIT)
-        self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
-        #self.fboTexture.bind()
-        #self.imageTexture[0]['texture'].bind()
-        #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameSwapBufferObject.texture() )
-        self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.fboTexture.textureId() )
-        self.gl.glActiveTexture( self.gl.GL_TEXTURE1 )
-        #self.imageTexture[0]['texture'].bind()
-        self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameSwapBufferObject.texture() )
-        #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.imageTexture[0]['texture'].textureId() )
-        
-        self.offscreenVAO.bind()
-        """
-        
-        
-        """
-        gl.glActiveTexture( activeTexture )
-
-        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT,1)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, textureBind )
-        
-        samplerUniformLocation = gl.glGetUniformLocation(self.glProgram, samplerName )
-        gl.glUniform1i( samplerUniformLocation, samplerUniformBind )
-        """
-        
-        
-        
-        """
-        self.gl.glDrawArrays( self.gl.GL_TRIANGLE_STRIP, 0, 4 )
-        self.offscreenVAO.release()
-        self.frameBufferObject.release()
-        
-        self.fboTexture.release()
-        self.imageTexture[0]['texture'].release()
-        """
+        self.gl.glFinish()
         
         # -- -- --
         
@@ -1789,202 +1969,48 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         
         
     def paintGL(self):
-        if self.initialized and self.glContext:
+        glContinue = False
+        if self.isContextInitialized() :
+            pass;
+    
+        # Lock Context to prevent Release and potential PyQt Application Crash
+        self.glContextReleased = False
+    
+        #print("Init render")
         
-            #print("Init render")
+        #print("Render ",self.glEffect," - ",str(self.id)," -- ")
+        
+        
+        for renderPass in self.glRenderPassList:
+            curPassDataDict = self.glProgramList[ renderPass ]
+            curPassProgram = curPassDataDict['program']
             
-            #print("Render ",self.glEffect," - ",str(self.id)," -- ")
+            self.bindRenderPass( renderPass, self.glProgramList )
+        
+        
+        #print("Did it draw?")
+        if self.saveNextRender :
+            self.saveBuffer( "current", saveName="colorOut", doPaint=False )
             
-            #self.glContext.makeCurrent( self.glContext.surface() )
-            self.glContext.makeCurrent( self )
+        self.saveNextRender = False
+        
+        self.drawToDebugWidgets()
+        
+        #self.swapSurfaceBuffers()
+        
+        self.gl.glFinish()
+        
+        #self.disableContext( True )
+        
+        #print("Render Completed")
             
-            self.gl.glViewport( 0, 0, self.imgWidth, self.imgHeight )
-            
-            
-            for renderPass in self.glRenderPassList:
-                curPassDataDict = self.glProgramList[ renderPass ]
-                curPassProgram = curPassDataDict['program']
-                
-                self.bindRenderPass( renderPass, self.glProgramList )
-            
-            
-            
-            
-            """
-            
-            for currentPassName in self.glRenderPassList:
-                curPassDataDict = self.glProgramList[ currentPassName ]
-                curPassProgram = curPassDataDict['program']
-                self.buildUniforms( curPassDataDict )
-                
-                curPassVAO = QtGui.QOpenGLVertexArrayObject( self )
-                curPassVAO.create()
-                
-                curPassVAO.bind()
-                vaoPositionList = [ -1,1, 1,1, -1,-1, 1,-1 ]
-                vaoTexCoordList = [ 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0 ]
-                self.positionVBOOff = self.setVertexBuffer( vaoPositionList, 2, curPassProgram, "position" )
-                self.uvVBOOff = self.setVertexBuffer( vaoTexCoordList, 2, curPassProgram, "uv" )
-                curPassVAO.release()
-                
-                curPassDataDict['geoObject'] = curPassVAO
-            
-            
-            """
-            
-            
-            
-            
-            
-            
-            
-            """
-            if self.hasFboProgram :
-                self.glFboProgram.bind()
-            else:
-                self.glProgram.bind()
-                
-            
-            # offscreen render
-            #self.fboTexture.bind()
-            
-            self.frameBufferObject.bind()
-            self.gl.glClear(self.gl.GL_COLOR_BUFFER_BIT)
-            self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
-            #self.fboTexture.bind()
-            #self.imageTexture[0]['texture'].bind()
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameSwapBufferObject.texture() )
-            self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.fboTexture.textureId() )
-            self.gl.glActiveTexture( self.gl.GL_TEXTURE1 )
-            #self.imageTexture[0]['texture'].bind()
-            self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameSwapBufferObject.texture() )
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.imageTexture[0]['texture'].textureId() )
-            
-            self.offscreenVAO.bind()
-            """
-            
-            
-            """
-            gl.glActiveTexture( activeTexture )
-
-            gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT,1)
-            gl.glBindTexture(gl.GL_TEXTURE_2D, textureBind )
-            
-            samplerUniformLocation = gl.glGetUniformLocation(self.glProgram, samplerName )
-            gl.glUniform1i( samplerUniformLocation, samplerUniformBind )
-            """
-            
-            
-            
-            """
-            self.gl.glDrawArrays( self.gl.GL_TRIANGLE_STRIP, 0, 4 )
-            self.offscreenVAO.release()
-            self.frameBufferObject.release()
-            
-            self.fboTexture.release()
-            self.imageTexture[0]['texture'].release()
-            
-            
-            
-            #QtGui.QOpenGLFramebufferObject.blitFramebuffer( self.frameSwapBufferObject, self.frameBufferObject )
-            
-            if self.hasFboProgram :
-                self.glFboProgram.release()
-            
-            if self.glBufferSwapProgram :
-                print("render swap")
-                self.glBufferSwapProgram.bind()
-                self.frameSwapBufferObject.bind()
-                self.offscreenVAO.bind()
-                self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
-                self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameBufferObject.texture() )
-                #self.gl.glUniform1i( self.glBufferSwapProgram.uniformLocation('samplerTex'), self.frameBufferObject.texture() )
-                
-                #self.fboTexture.bind()
-                self.gl.glClear(self.gl.GL_COLOR_BUFFER_BIT)
-                self.gl.glDrawArrays( self.gl.GL_TRIANGLE_STRIP, 0, 4 )
-            
-                #self.fboTexture.release()
-                self.offscreenVAO.release()
-                self.frameSwapBufferObject.release()
-                self.glBufferSwapProgram.release()
-            
-            
-            
-            
-            self.glProgram.bind()
-
-            self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
-            # screen render
-            #self.fboTexture.bind()
-            #self.gl.glActiveTexture( self.gl.GL_TEXTURE0 )
-            #self.imageTexture[0]['texture'].bind()
-            #self.fboTexture.bind()
-            self.imageTexture[0]['texture'].bind()
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameBufferObject.texture() )
-            #self.gl.glUniform1i( self.glProgram.uniformLocation('samplerTex'), self.frameSwapBufferObject.texture() )
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameBufferObject.texture() )
-            #self.gl.glActiveTexture( self.gl.GL_TEXTURE1 )
-            #self.fboTexture.bind()
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameSwapBufferObject.texture() )
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameSwapBufferObject.texture() )
-            
-            self.renderVAO.bind()
-            self.gl.glClear(self.gl.GL_COLOR_BUFFER_BIT)
-            self.gl.glDrawArrays( self.gl.GL_TRIANGLE_STRIP, 0, 4 )
-            self.renderVAO.release()
-            #self.fboTexture.release()
-            self.imageTexture[0]['texture'].release()
-            self.glProgram.release()
-            """
-            
-            
-            
-            """
-            #self.glContext.makeCurrent( self )
-            self.glContext.makeCurrent( self.surface )
-            
-            self.glProgram.bind()
-            self.renderVAO.bind()
-            #self.imageTexture[-1]['texture'].bind()
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.texture_id )
-            #self.VBO.bind()
-            #self.imageTexture[-1]['texture'].bind()
-            #self.glProgram.setUniformValue( "samplerTex", 0 )
-            #self.gl.glClear(self.gl.GL_COLOR_BUFFER_BIT)
-            self.fboTexture.bind()
-            self.frameBufferObject.bind()
-            self.gl.glDrawArrays( self.gl.GL_TRIANGLE_STRIP, 0, 4 )
-            self.renderVAO.release()
-            self.frameBufferObject.release()
-            
-            
-            #self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.frameBufferObject.texture() )
-            self.gl.glBindTexture( self.gl.GL_TEXTURE_2D, self.fboTexture.textureId() )
-            self.renderVAO.bind()
-             
-            self.gl.glDrawArrays( self.gl.GL_TRIANGLE_STRIP, 0, 4 )
-            
-                
-            #self.renderVAO.release()
-            #self.imageTexture[-1]['texture'].release()
-            #self.glProgram.release()
-            """
-            
-            self.drawToDebugWidgets()
-            
-            #print("Did it draw?")
-            if self.saveNextRender :
-                self.saveBuffer( "current", saveName="colorOut", doPaint=False )
-                
-            self.saveNextRender = False
-            
-            #self.glContext.makeCurrent()
-            
-            self.glContext.swapBuffers( self.glContext.surface() )
-            #self.glContext.doneCurrent()
-            
-            #print("Did context done?")
+    @QtCore.pyqtSlot()
+    def frameSwapComplete(self):
+        #print("Frame Swap Complete")
+        #self.disableContext( True )
+        
+        return;
+        
     @QtCore.pyqtSlot()
     def simTimeout(self):
         if self.hasSim :
@@ -2108,16 +2134,17 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                             curBuiltinData['value'][x] = v
                             
                     print( "prev val",curBuiltinData['prevValue']," - new val", curBuiltinData['value'])
-            self.setRenderPassUniforms( self.builtinControlledUniforms[builtinName], allPasses, doPaint )
+            contextState = self.setRenderPassUniforms( self.builtinControlledUniforms[builtinName], allPasses, doPaint )
         else:
             print(" ! Warning ! No previously assigned Builtin's Uniform Dict for '"+builtinName+"'")
             
     # Seems overkill to have as a separate method, need to consider future needs
     def setRenderPassUniforms(self, uniformData, allPasses=True, doPaint=True ):
         if type(uniformData) == dict:
-            if QtGui.QOpenGLContext.currentContext() != self.glContext:
-            #    #self.glContext.makeCurrent( self.glContext.surface() )
-                self.glContext.makeCurrent( self )
+            if not self.enableContextCheck():
+                print( " ! GL Context can't be made Current, Canceling ! ")
+                return False
+            
             for dataKey in uniformData:
                 # { Render Pass Name : { Uniform Name : {Type, Value} } }
                 #     Currently, Render Pass Builtin's Uniform Dict Passed
@@ -2142,15 +2169,17 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
                 else:
                     print(" ! Warning ! Only Render Pass Dict accepted as 'uniformData' argument to 'self.setUniformValue()' *WIP*")
             
-            self.glContext.doneCurrent()
+            self.disableContext()
                     
             if doPaint:
                 self.update()
                 self.paintGL()
+            return True
         else:
             # Uhh.... Current shader program maybe?
             #   But not storing that, yet
             print(" ! Warning ! Please pass a render pass data dictionary as the 'uniformData' argument to 'self.setUniformValue()'")
+            return None
     def setControllerUniformValue( self, renderPass, uniformName, toValue ):
         #print( renderPass, uniformName, toValue )
         #print( self.glProgramList )
@@ -2209,39 +2238,41 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
         #self.textureGLWidget.paintGL()
         
     def saveBuffer(self, sourceBuffer=None, savePath=None, saveName="bufferOut", saveFormat=None, stepFrameCount=True, doPaint=True ):
-        if doPaint:
-            self.paintGL()
+        # Handle the new Context Locking for saving buffer renders
+        #if doPaint:
+        #    self.paintGL()
         
-        print( savePath )
-        print( saveFormat )
         #self.gl.glUseProgram(self.glProgram)
         outImage = None
         if self.outImagePrefix == None:
             self.findPrefixNumber( savePath )
         if sourceBuffer != "current":
-            try:
-                sourceBuffer.bind()
-                outImage = sourceBuffer.toImage(True)
-            except:
-                print("Failed to bind buffer")
+            if self.hasFboProgram :
+                foundImageData = False
+                for renderPass in self.glProgramList :
+                    curPassData = self.glProgramList[renderPass]
+                    if 'passType' in curPassData and curPassData['passType'] == "fbo":
+                        # Gonna be pretty slow here for fboTexture
+                        #   Might be better to swap shader render it to a fbo  ::shrugs::
+                        #     Needs testing it even works
+                        if 'fboTexture' in curPassData and curPassData['fboTexture'] :
+                            outImage = self.gl.glGetTexImage( self.gl.GL_TEXTURE_2D, curPassData['fboTexture'], self.gl.GL_RGB, self.gl.GL_UNSIGNED_BYTE, outputType=None )
+                        elif 'fboObject' in curPassData and curPassData['fboObject'] :
+                            outImage = curPassData['fboObject'].toImage()
+                        if outImage != None:
+                            foundImageData = True
+                            break;
+                if not foundImageData:
+                    outImage = self.grabFramebuffer()
+            else:
+                try:
+                    sourceBuffer.bind()
+                    outImage = sourceBuffer.toImage(True)
+                except:
+                    print("Failed to bind buffer")
+                    outImage = self.grabFramebuffer()
         else:
             outImage = self.grabFramebuffer()
-        outImage = self.grabFramebuffer()
-        
-        self.fboTexture.bind()
-        outImage = self.frameBufferObject.toImage()
-        outImage = self.glTempImage
-        #    self.fboTexture.bind()
-        #    self.frameBufferObject.bind()
-        
-        print( self.frameBufferObject.textures() )
-        print( self.fboTexture.textureId() )
-        
-        pix = QtGui.QPixmap.fromImage( self.frameBufferObject.toImage() )
-        pix = QtGui.QPixmap.fromImage( self.glTempImage )
-        tmpLabel = QtWidgets.QLabel()
-        tmpLabel.setPixmap( pix )
-        tmpLabel.show()
         
         
         if savePath == None:
@@ -2322,6 +2353,90 @@ class TextureGLWidget(QtGui.QOpenGLWindow):
             self.parent.setStatusBar( message, importance, setTimeout )
         else:
             print( message )
+    
+    def destroyTypedObject( self, glObject = None ):
+        print("Destroy type - "+str(type(glObject)))
+        
+        # self.gl.glIsBuffer
+        # self.gl.glIsEnabled
+        # self.gl.glIsList
+        # self.gl.glIsProgram
+        # self.gl.glIsQuery
+        # self.gl.glIsShader
+        # self.gl.glIsTexture
+        return;
+    
+    # Assume - Destory All; GPU & CPU Objects
+    # 'objectToDestroy' should be a Render Pass Dict
+    #   To properly clean memory links in dicts
+    # But OpenGL or QOpenGL objects will still dump and destroy
+    #   This is the primary concern when destroying any pxlViewportGL Object
+    def destroy( self, objectToDestroy=None ):
+        print("!! pxlViewportGL.ImageShaderGL.destroy() !!")
+        print( type(objectToDestroy) )
+        
+        renderPassCleanupList = []
+        
+        # TODO : Develop !None Checks
+        if objectToDestroy != None:
+            destroyObjType = type(objectToDestroy)
+            if destroyObjType == str:
+                if destroyObjType in self.glRenderPassList:
+                    renderPassCleanupList.append( objectToDestroy )
+                else:
+                    #Add more cases
+                    pass;
+            elif destroyObjType == dict:
+                destroyObjKeys = list(objectToDestroy.keys())
+        else:
+            # glRenderPassList and glProgramList should be in-sync
+            #   If not, merge keys for cleaning up stragglers
+            #     If there are stragglers, I messed up somewhere
+            # Known Render Pass Names
+            renderPassCleanupList = [*self.glRenderPassList]
+            # Merge Program List Render Pass Data
+            renderPassCleanupList = list(set( list(objectToDestroy.keys()) + self.glProgramList.keys() ))
+            
+        # TODO : Add deletion for non RenderPass Objects
+        for renderPass in renderPassCleanupList:
+            print("Destroy "+renderPass)
+            if renderPass in self.glProgramList:
+                for passEntry in self.glProgramList[renderPass]:
+                    print(" - Destory '"+passEntry+"'  '"+str(type(self.glProgramList[renderPass][passEntry]))) 
+        """
+        'geoObject'
+        QOpenGLVertexArrayObject.destroy()
+        ['vboObjects']
+        QOpenGLBuffer.destroy()
+        :
+            curPassDataDict = self.glProgramList[ currentPassName ]
+                "passType":None,
+                "uniforms":None, # ShaderName.py Uniforms Dict
+                "samplers":None, # { Uniform Name : {self.glPassSamplerDict.copy()} }
+                "program":None,
+                "builtins":None, # Easy lookup of "native builtin" uniform types { BuiltIn : Uniform Name }
+                "textures":None, # [ self.glPassTextureDict.copy() ]
+                "fboObject":None,
+                "fboLocation":None,
+                "fboTexture":None,
+                "geoObject":None,
+                "vboObjects":None # Stored for Memory Cleanup reasons
+        """
+        """
+        self.glContext
+        
+        if objectToDestroy == None:
+            #Delete All
+            pass;
+        self.gl.glDeleteVertexArrays( 1, vaos );
+        self.gl.glDeleteBuffers( 1, vbos );
+        self.gl.glDeleteBuffers( 1, fbos );
+        
+        QOpenGLTexture.destroy()
+        """
+        
+        self.destroyLater()
+        
         
 class ImageShaderWidget(QWidget):
     def __init__(self,parent=None, glId=0, glContextManager=None, glEffect="default", initTexturePath="assets/glTempTex.jpg", saveImagePath=None ):
@@ -2339,7 +2454,11 @@ class ImageShaderWidget(QWidget):
         # TODO : Check For Global Shared Context if no glContextManager
         #          Else, create non-shared context
         self.glContextManager = glContextManager
-        self.glSharedContext, self.glFormat = glContextManager.checkContextState()
+        self.glSharedContext = None
+        self.glFormat = None
+        
+        if glContextManager :
+            self.glSharedContext, self.glFormat = glContextManager.checkContextState()
 
         
         self.glEffect = glEffect
@@ -2361,8 +2480,6 @@ class ImageShaderWidget(QWidget):
         
         # -- -- --
         
-        self.textureGLWidget = None
-        
         textureGLWidgetBlock = QWidget()
         self.textureGLWidgetLayout = QHBoxLayout()
         self.textureGLWidgetLayout.setContentsMargins(0,0,0,0)
@@ -2379,6 +2496,10 @@ class ImageShaderWidget(QWidget):
         shaderSideBarBlock.setLayout(self.shaderSideBarLayout)
         shaderSideBarBlock.setMaximumWidth(250)
         self.viewportLayout.addWidget(shaderSideBarBlock)
+        
+        # -- -- --
+        
+        self.shaderSideBarLayout.addStretch(1)
         
         # -- -- --
         
@@ -2420,7 +2541,7 @@ class ImageShaderWidget(QWidget):
             print("Found Global Context")
             self.setSharedGlContext( self.glSharedContext )
         
-        
+    
     # Check if context already exists
     #   At that rate, context should just be passed anyway
     def getSharedGlContext(self):
@@ -2430,31 +2551,90 @@ class ImageShaderWidget(QWidget):
     def setSharedGlContext(self, curContext=None ):
         print( " ImageShaderGL ",self.glEffect," - ",str(self.id)," recieved context; Valid - ", curContext.isValid() )
         if not self.textureGLWidget:
+        
+            textureGLDisplayBlock = QWidget()
+            self.textureGLDisplayLayout = QVBoxLayout()
+            self.textureGLDisplayLayout.setAlignment(QtCore.Qt.AlignCenter)
+            self.textureGLDisplayLayout.setContentsMargins(0,0,0,0)
+            self.textureGLDisplayLayout.setSpacing(2)
+            textureGLDisplayBlock.setLayout(self.textureGLDisplayLayout)
+            self.textureGLWidgetLayout.addWidget(textureGLDisplayBlock)
+        
             self.textureGLWidget = TextureGLWidget( self, self.id, self.glFormat, curContext, self.glEffect, self.initTexturePath, self.saveImagePath )
             self.windowView = QWidget.createWindowContainer( self.textureGLWidget )
             self.windowView.setFixedWidth(512)
             self.windowView.setMinimumHeight(512)
-            self.windowView.setMaximumHeight(600)
-            self.textureGLWidgetLayout.addWidget(self.windowView)
+            self.windowView.setMaximumHeight(512)
+            self.textureGLDisplayLayout.addWidget(self.windowView)
+            
+            curLabel = QLabel('Final Output Pass', self)
+            curLabel.setMaximumHeight(30)
+            curLabel.setAlignment(QtCore.Qt.AlignCenter)
+            self.textureGLDisplayLayout.addWidget( curLabel )
+            
+            # -- -- --
+            
+            bufferDisplayBlock = QWidget()
+            self.bufferDisplayLayout = QVBoxLayout()
+            self.bufferDisplayLayout.setAlignment(QtCore.Qt.AlignCenter)
+            self.bufferDisplayLayout.setContentsMargins(0,0,0,0)
+            self.bufferDisplayLayout.setSpacing(2)
+            bufferDisplayBlock.setLayout(self.bufferDisplayLayout)
+            self.textureGLWidgetLayout.addWidget(bufferDisplayBlock)
             
             self.bufferDisplay = QLabel(self)
             self.bufferDisplay.setFixedWidth(512)
             self.bufferDisplay.setMinimumHeight(512)
-            self.bufferDisplay.setMaximumHeight(600)
-            self.textureGLWidgetLayout.addWidget(self.bufferDisplay)
+            self.bufferDisplay.setMaximumHeight(512)
+            self.bufferDisplayLayout.addWidget(self.bufferDisplay)
+            
+            curLabel = QLabel('#1 Render Pass, FBO', self)
+            curLabel.setMaximumHeight(30)
+            curLabel.setAlignment(QtCore.Qt.AlignCenter)
+            self.bufferDisplayLayout.addWidget( curLabel )
+        
+            # -- -- --
+            
+            swapDisplayBlock = QWidget()
+            self.swapDisplayLayout = QVBoxLayout()
+            self.swapDisplayLayout.setAlignment(QtCore.Qt.AlignCenter)
+            self.swapDisplayLayout.setContentsMargins(0,0,0,0)
+            self.swapDisplayLayout.setSpacing(2)
+            swapDisplayBlock.setLayout(self.swapDisplayLayout)
+            self.textureGLWidgetLayout.addWidget(swapDisplayBlock)
             
             self.swapDisplay = QLabel(self)
             self.swapDisplay.setFixedWidth(512)
             self.swapDisplay.setMinimumHeight(512)
-            self.swapDisplay.setMaximumHeight(600)
-            self.textureGLWidgetLayout.addWidget(self.swapDisplay)
+            self.swapDisplay.setMaximumHeight(512)
+            self.swapDisplayLayout.addWidget(self.swapDisplay)
+            
+            curLabel = QLabel('#2 Render Pass, FBO Swap', self)
+            curLabel.setMaximumHeight(30)
+            curLabel.setAlignment(QtCore.Qt.AlignCenter)
+            self.swapDisplayLayout.addWidget( curLabel )
+            
+            # -- -- --
+            
+            renderDisplayBlock = QWidget()
+            self.renderDisplayLayout = QVBoxLayout()
+            self.renderDisplayLayout.setAlignment(QtCore.Qt.AlignCenter)
+            self.renderDisplayLayout.setContentsMargins(0,0,0,0)
+            self.renderDisplayLayout.setSpacing(2)
+            renderDisplayBlock.setLayout(self.renderDisplayLayout)
+            self.textureGLWidgetLayout.addWidget(renderDisplayBlock)
             
             self.renderDisplay = QLabel(self)
             self.renderDisplay.setFixedWidth(512)
             self.renderDisplay.setMinimumHeight(512)
-            self.renderDisplay.setMaximumHeight(600)
-            self.textureGLWidgetLayout.addWidget(self.renderDisplay)
-        
+            self.renderDisplay.setMaximumHeight(512)
+            self.renderDisplayLayout.addWidget(self.renderDisplay)
+            
+            curLabel = QLabel('glReadPixel After Final Pass Swap Buffer', self)
+            curLabel.setMaximumHeight(30)
+            curLabel.setAlignment(QtCore.Qt.AlignCenter)
+            self.renderDisplayLayout.addWidget( curLabel )
+    
         
     def imageOffset(self,x,y, setOffset=True):
         if self.textureGLWidget:
@@ -2544,9 +2724,10 @@ class ImageShaderWidget(QWidget):
         except:
             pass;
             
-        if glTextureWidget != None:
-            print( "Passing Target GL Context" )
-            self.textureGLWidget.setTargetGLObject( glTextureWidget.textureGLWidget )
+        #if glTextureWidget != None:
+        #    print( "Passing Target GL Context" )
+        #    self.textureGLWidget.setTargetGLObject( glTextureWidget.textureGLWidget )
+        print( "-- Not Setting TargetGL, Logic Has Changed, Cancelling --" )
             
     def updateUniformValue(self, renderPass, uniform, sliderList, decimalCount):
         toValue = []
@@ -2560,8 +2741,9 @@ class ImageShaderWidget(QWidget):
     def passTargetGL( self, targetGL = None ):
         print( "Passing TargetGL To GL Viewport Object" )
         print( targetGL )
-        if targetGL != None:
-            self.textureGLWidget.setTargetGLObject( targetGL )
+        print( "-- Not Passing To Target, Logic Has Changed, Cancelling --" )
+        #if targetGL != None:
+        #    self.textureGLWidget.setTargetGLObject( targetGL )
     
     def setStatusBar( self, message=None, importance=0, noTimeout=False ):
         if message == None:
@@ -2571,6 +2753,12 @@ class ImageShaderWidget(QWidget):
             self.parent.setStatusBar( message, importance, noTimeout )
         else:
             print( message )
+            
+    def destroy( self ):
+        print("pxlViewportGL.ImageShaderGL.destroy() not fully implement yet")
+        if self.textureGLWidget:
+            self.textureGLWidget.destroy()
+        self.destroyLater()
             
 # main function
 if __name__ == '__main__':
